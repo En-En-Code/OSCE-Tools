@@ -7,3 +7,7 @@ I started this hobby in August of 2021, and have since built a collection of ove
 Each tool is contained in its own folder, where a more detailed description of it can be found in that folder's README.
 
 # Table of Contents
+
+## [Lichess-Bot-Scraper](./Lichess-Bot-Scraper)
+
+Use the Lichess API to find bot accounts with repositories to open source chess engines.

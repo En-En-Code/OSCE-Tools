@@ -54,7 +54,7 @@ const readStream = processLine => response => {
   Any characters not /[A-Za-z\d_.-]/ are converted to /-/.
 */
 const githubRepoRegex =
-  /(?:github.com\/[A-Za-z\d](?:[A-Za-z\d]|-(?!-)){0,38}\/[A-Za-z\d_.-]{1,100})/;
+  /(?:(?:gist.)?github.com\/[A-Za-z\d](?:[A-Za-z\d]|-(?!-)){0,38}\/[A-Za-z\d_.-]{1,100})/;
 
 /*
   Though testing on https://gitlab.com/users/sign_up, I have determined:
@@ -117,8 +117,10 @@ const extractRepoLinks = account => {
     }
   }
   if (repoList.length > 0) {
+    // Append the Lichess profile prefix so the account becomes a link
     // Append the web protocol so most command line recognize them as links
-    linkCollection.push([account.id, repoList.map(x => "https://".concat(x))]);
+    linkCollection.push(["https://lichess.org/@/".concat(account.id),
+      repoList.map(x => "https://".concat(x))]);
   }
 }
 

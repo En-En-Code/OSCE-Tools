@@ -8,6 +8,10 @@ Each tool is contained in its own folder, where a more detailed description of i
 
 # Table of Contents
 
+## [Cli-Launch-Scripts](./Cli-Launch-Scripts)
+
+Various scripts which launch [cutechess-cli](https://github.com/cutechess/cutechess) and run engine games automatically, often to check engines for unexpected behavior.
+
 ## [Lichess-Bot-Scraper](./Lichess-Bot-Scraper)
 
 Use the Lichess API to find bot accounts with repositories to open source chess engines.

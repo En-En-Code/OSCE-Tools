@@ -96,16 +96,12 @@ inline void listAllVersions(PGconn* conn, char* engine_name) {
     // https://www.postgresql.org/docs/15/libpq-exec.html#LIBPQ-PQESCAPELITERAL
     // I still feel this really should have some kind of SQL injection protection.
     paramValues[0] = engine_name;
-    
+
     PGresult* res;
-    printf("SELECT engine_name, version_num, release_date, "
-            "program_lang, license, accepts_xboard, accepts_uci, notes "
-            "FROM versions JOIN engines ON engine_name = %s;\n", paramValues[0]); 
-    
     res = PQexecParams(conn,
                         "SELECT engine_name, version_num, release_date, "
                         "program_lang, license, accepts_xboard, accepts_uci, notes "
-                        "FROM versions JOIN engines ON engine_name = $1;",
+                        "FROM versions v JOIN engines e ON v.engine_id = e.engine_id AND engine_name = $1;",
                         1, NULL, paramValues, NULL, NULL, 0);
     if (PQresultStatus(res) != PGRES_TUPLES_OK) {
         fprintf(stderr, "SELECT failed: %s", PQerrorMessage(conn));

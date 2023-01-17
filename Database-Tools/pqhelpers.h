@@ -15,4 +15,8 @@ limitations under the License.
 */
 
 extern PGconn* initConnection(const char* conninfo);
+extern void printTable(PGresult* res);
+
 extern void listAllEngines(PGconn* conn);
+extern void listAllEnginesWithName(PGconn* conn, char* engine_name);
+extern void listAllVersions(PGconn* conn, char* engine_name);

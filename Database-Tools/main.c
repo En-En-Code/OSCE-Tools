@@ -35,19 +35,31 @@ int main(int argc, char** argv) {
     conn = initConnection(conninfo);
     
     char* input = (char*)malloc(4096);
-    while (toupper(input[0]) != 'Q') {
+    while (input[0] != 'Q') {
         printf("Accepted database commands:\n");
         printf("E (List all engines)\n");
-        //printf("V [NAME] (List all versions of all engines with name NAME)\n");
+        printf("V [NAME] (List all versions of all engines with name NAME)\n");
         //printf("N (Create new engine)\n");
         //printf("R (Create relation)\n");
         printf("Q (Quit)\n");
         fgets(input, 4096, stdin);
         
-        switch (toupper(input[0])) {
+        if (input[strlen(input) -1] == '\n')
+        	input[strlen(input) -1] = '\0';
+        input[0] = toupper(input[0]);
+        
+        switch (input[0]) {
             case 'E':
                 listAllEngines(conn);
                 break;
+            case 'V':
+               char* engine_name = strchr(input, ' ');
+               if (engine_name == NULL) {
+                   printf("Name of engine expected.\n");
+                   break;
+               }
+               listAllVersions(conn, engine_name + 1);
+               break;
         }
     }
     free(input);

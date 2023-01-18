@@ -14,24 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include <libpq-fe.h>
-#include "clihelpers.h"
-#include "pqhelpers.h"
-
-int main(int argc, char** argv) {
-    const char* conninfo;
-    PGconn*     conn;
-
-    if (argc > 1) {
-        conninfo = argv[1];
-    } else {
-        conninfo = "dbname=engine_db";
-    }
-
-    conn = initConnection(conninfo);
-    
-    cliLoop(conn);
-    
-    PQfinish(conn);
-    return 0;
-}
+extern void cliLoop(PGconn* conn);
+extern void listCliCommands();

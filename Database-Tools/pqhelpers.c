@@ -17,7 +17,6 @@ limitations under the License.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
 #include <libpq-fe.h>
 #include "pqhelpers.h"
 
@@ -91,13 +90,22 @@ inline void listAllEngines(PGconn* conn) {
 
 inline void listAllVersions(PGconn* conn, char* engine_name) {
     const char* paramValues[1];
-    // Note that it is neither necessary nor correct to do escaping when
-    // a data value is passed as a separate parameter in PQexecParams.
-    // https://www.postgresql.org/docs/15/libpq-exec.html#LIBPQ-PQESCAPELITERAL
-    // I still feel this really should have some kind of SQL injection protection.
+    /*
+    Note that it is neither necessary nor correct to do escaping when
+    a data value is passed as a separate parameter in PQexecParams.
+        -- https://www.postgresql.org/docs/15/libpq-exec.html#LIBPQ-EXEC-ESCAPE-STRING
+    */
     paramValues[0] = engine_name;
 
     PGresult* res;
+    /*
+    Parameterized statements use stored queries that have markers, known as
+    parameters, to represent the input data. Instead of parsing the query and
+    the data as a single string, the database reads only the stored query as
+    query language, allowing user inputs to be sent as a list of parameters
+    that the database can treat solely as data.
+        -- https://www.crunchydata.com/blog/preventing-sql-injection-attacks-in-postgresql
+    */
     res = PQexecParams(conn,
                         "SELECT engine_name, version_num, release_date, "
                         "program_lang, license, accepts_xboard, accepts_uci, notes "

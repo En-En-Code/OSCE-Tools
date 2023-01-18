@@ -15,4 +15,6 @@ limitations under the License.
 */
 
 extern void cliLoop(PGconn* conn);
-extern void listCliCommands();
+extern void cliListCommands();
+
+extern char* cliAllocEngineName();

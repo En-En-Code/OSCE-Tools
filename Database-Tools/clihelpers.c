@@ -22,14 +22,27 @@ limitations under the License.
 #include "clihelpers.h"
 #include "pqhelpers.h"
 
+struct Version {
+    char versionNum[256];
+    unsigned int releaseDate[3]; //0 for year, 1 for month, 2 for day
+    char programLang[256];
+    char license[256];
+    int xboard; //xboard and uci are bool-like
+    int uci;
+    char* notes;
+};
+
 inline void cliLoop(PGconn* conn) {
     char* input = (char*)malloc(4096);
+    input[0] = '\0';
     while (input[0] != 'Q') {
-        listCliCommands();
-        fgets(input, 4096, stdin);
-        
+        cliListCommands();
+        if (fgets(input, 4096, stdin) == NULL) {
+            fprintf(stderr, "fgets returned a NULLPTR.\n");
+            continue;
+        }
         if (input[strlen(input) -1] == '\n')
-        	input[strlen(input) -1] = '\0';
+            input[strlen(input) -1] = '\0';
         input[0] = toupper(input[0]);
         
         switch (input[0]) {
@@ -37,14 +50,19 @@ inline void cliLoop(PGconn* conn) {
                 listAllEngines(conn);
                 break;
             case 'V':
-               char* engine_name = strchr(input, ' ');
-               if (engine_name == NULL) {
-                   fprintf(stderr, "Name of engine expected.\n");
-                   break;
-               }
-               listAllVersions(conn, engine_name + 1);
-               break;
+                char* engine_name = strchr(input, ' ');
+                if (engine_name == NULL) {
+                    fprintf(stderr, "Name of engine expected.\n");
+                    break;
+                }
+                listAllVersions(conn, engine_name + 1);
+                break;
             case 'N':
+                char* new_engine_name = cliAllocEngineName();
+                //char** author_names = cliAllocAuthors();
+                //char** source_uri = cliAddNewSourceURIs();
+                //cliAddNewVersion(conn);
+                free(new_engine_name);
                 break;
             case 'Q':
                 // Intentional no error, since 'Q' quits loop.
@@ -56,11 +74,27 @@ inline void cliLoop(PGconn* conn) {
     free(input);
 }
 
-inline void listCliCommands() {
+inline void cliListCommands() {
     printf("Accepted database commands:\n");
     printf("E (List all engines)\n");
     printf("V [NAME] (List all versions of all engines with name NAME)\n");
     //printf("N (Create new engine)\n");
     //printf("R (Create relation)\n");
     printf("Q (Quit)\n");
+}
+
+// Memory is allocated by to store the engine_name.
+// Free must be called after finishing using the returned value.
+inline char* cliAllocEngineName() {
+    char* engine_name = (char*)malloc(256);
+    engine_name[0] = '\0';
+    do {
+        printf("Name of engine (cannot be empty): ");
+	} while (fgets(engine_name, 256, stdin) == NULL ||
+	        (engine_name[0] == '\0' || engine_name[0] == '\n'));
+	
+	if (engine_name[strlen(engine_name) -1] == '\n')
+        engine_name[strlen(engine_name) -1] = '\0';
+	
+    return engine_name;
 }

@@ -16,7 +16,7 @@
 
 engine=${engine:-"null"}
 proto=${proto:-"null"}
-games=${games:-"100"}
+games=${games:-"1000"}
 
 while [ $# -gt 0 ]; do
   if [[ $1 = *"--"* ]]; then
@@ -41,5 +41,5 @@ fi
 cutechess-cli \
 -engine cmd=$engine proto=$proto \
 -engine cmd=$engine proto=$proto \
--each tc=4/6 timemargin=0 -games $games -repeat \
+-each tc=4/0.1 timemargin=0 -games $games -repeat \
 -recover -concurrency $(nproc)

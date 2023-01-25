@@ -33,16 +33,12 @@ struct Version {
 };
 
 inline void cliLoop(PGconn* conn) {
-    char* input = (char*)malloc(4096);
+    char* input = (char*)cliMalloc(4096);
     input[0] = '\0';
+
     while (input[0] != 'Q') {
         cliListCommands();
-        if (fgets(input, 4096, stdin) == NULL) {
-            fprintf(stderr, "fgets returned a NULLPTR.\n");
-            continue;
-        }
-        if (input[strlen(input) -1] == '\n')
-            input[strlen(input) -1] = '\0';
+        input[cliReadInput(input, 4096)] = '\0';
         input[0] = toupper(input[0]);
         
         switch (input[0]) {
@@ -52,23 +48,25 @@ inline void cliLoop(PGconn* conn) {
             case 'V':
                 char* engine_name = strchr(input, ' ');
                 if (engine_name == NULL) {
-                    fprintf(stderr, "Name of engine expected.\n");
+                    fprintf(stderr, "Name of engine expected.\n\n");
                     break;
                 }
                 listAllVersions(conn, engine_name + 1);
                 break;
             case 'N':
                 char* new_engine_name = cliAllocEngineName();
-                //char** author_names = cliAllocAuthors();
-                //char** source_uri = cliAddNewSourceURIs();
+                char* author_names = cliAllocNDSeries("author", 256);
+                char* sources = cliAllocNDSeries("URI", 4096);
                 //cliAddNewVersion(conn);
                 free(new_engine_name);
+                free(author_names);
+                free(sources);
                 break;
             case 'Q':
                 // Intentional no error, since 'Q' quits loop.
                 break;
             default:
-                fprintf(stderr, "Command %c not expected.\n", input[0]);
+                fprintf(stderr, "Command %c not expected.\n\n", input[0]);
         }
     }
     free(input);
@@ -83,18 +81,89 @@ inline void cliListCommands() {
     printf("Q (Quit)\n");
 }
 
-// Memory is allocated by to store the engine_name.
-// Free must be called after finishing using the returned value.
+// An fgets-stdin wrapper which handles possible fgets errors.
+// Returns the number of bytes before a newline read, which is far more useful than s.
+inline int cliReadInput(char* s, int size) {
+    if (fgets(s, size, stdin) == NULL) {
+        fprintf(stderr, "fgets returned a NULLPTR.\n");
+        exit(1);
+    }
+    return strcspn(s, "\r\n");
+}
+
+// Memory is allocated by this function to store ptr.
+// Free must be called when finished with the returned value.
+inline void* cliMalloc(size_t size) {
+    void* ptr = malloc(size);
+    if (ptr == NULL) {
+        fprintf(stderr, "Not enough memory to perform allocation.\n");
+        exit(1);
+    }
+    return ptr;
+}
+
+// Memory is allocated by this function to store new_ptr.
+// Free must be called when finished with the returned value.
+// Note this function can possibly free memory if size = 0.
+inline void* cliRealloc(void* ptr, size_t size) {
+    void* new_ptr = realloc(ptr, size);
+    if (new_ptr == NULL) {
+        fprintf(stderr, "Not enough memory to perform allocation.\n");
+        exit(1);
+    }
+    return new_ptr;
+}
+
+// Memory is allocated by this function to store the engine_name.
+// Free must be called when finished with the returned value.
 inline char* cliAllocEngineName() {
-    char* engine_name = (char*)malloc(256);
+    char* engine_name = (char*)cliMalloc(256);
     engine_name[0] = '\0';
+
     do {
         printf("Name of engine (cannot be empty): ");
-	} while (fgets(engine_name, 256, stdin) == NULL ||
-	        (engine_name[0] == '\0' || engine_name[0] == '\n'));
-	
-	if (engine_name[strlen(engine_name) -1] == '\n')
-        engine_name[strlen(engine_name) -1] = '\0';
+        engine_name[cliReadInput(engine_name, 256)] = '\0';
+	} while (engine_name[0] == '\0');
 	
     return engine_name;
+}
+
+// Memory is allocated by this function to store author_names.
+// Free must be called when finished with the returned value.
+// The format is a string of values, each value separated by a newline.
+inline char* cliAllocNDSeries(char* name, int size) {
+    char* nd_strings = NULL;
+    int total_bytes = 0;
+
+    while (total_bytes == 0) {
+        int bytes_written = size;
+
+        while (bytes_written > 0) {
+            nd_strings = (char*)cliRealloc(nd_strings, bytes_written);
+            printf("Enter one %s (Leave empty to finish adding %ss): ", name, name);
+            bytes_written = cliReadInput(nd_strings + total_bytes, size);
+            total_bytes += bytes_written + 1; //jump over the newline/stray terminator
+        }
+
+        // This might seem strange to do, but since a stray null terminator could 
+        // be inserted, I need a length which I know to be accurate.
+        total_bytes = strlen(nd_strings);
+        
+        // Remove every newline from the end of the string
+        while (total_bytes > 0) {
+            if (nd_strings[total_bytes-1] != '\n') {
+                break;
+            }
+            total_bytes -= 1;
+            nd_strings[total_bytes] = '\0';
+        }
+        if (total_bytes == 0) {
+            // Preparing to go again.
+            free(nd_strings); // Free the memory, since we need to reallocate.
+            nd_strings = NULL; // If names is not null, cliRealloc would double free.
+            fprintf(stderr, "No %ss inserted. Minimum one %s needed.\n", name, name);
+        }
+    }
+    
+	return nd_strings;
 }

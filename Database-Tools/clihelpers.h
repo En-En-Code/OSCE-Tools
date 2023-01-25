@@ -16,5 +16,10 @@ limitations under the License.
 
 extern void cliLoop(PGconn* conn);
 extern void cliListCommands();
+extern int  cliReadInput(char* s, int size);
+
+extern void* cliMalloc(size_t size);
+extern void* cliRealloc(void* ptr, size_t size);
 
 extern char* cliAllocEngineName();
+extern char* cliAllocNDSeries(char* name, int size);

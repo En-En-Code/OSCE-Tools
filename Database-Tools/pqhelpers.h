@@ -14,9 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-extern PGconn* initConnection(const char* conninfo);
-extern void printTable(PGresult* res);
+extern PGconn* pqInitConnection(const char* conninfo);
+extern void pqPrintTable(PGresult* res);
 
-extern void listAllEngines(PGconn* conn);
-extern void listAllEnginesWithName(PGconn* conn, char* engine_name);
-extern void listAllVersions(PGconn* conn, char* engine_name);
+extern void pqListAllEngines(PGconn* conn);
+extern void pqListAllEnginesWithName(PGconn* conn, char* engine_name);
+extern void pqListAllVersions(PGconn* conn, char* engine_name);
+
+extern int  pqAddNewEngine(PGconn* conn, char* engine_name);
+extern int  pqAddNewAuthor(PGconn* conn, int engine_id, char* authors);
+extern int  pqAddNewSource(PGconn* conn, int engine_id, char* sources);

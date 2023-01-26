@@ -28,7 +28,7 @@ int main(int argc, char** argv) {
         conninfo = "dbname=engine_db";
     }
 
-    conn = initConnection(conninfo);
+    conn = pqInitConnection(conninfo);
     
     cliLoop(conn);
     

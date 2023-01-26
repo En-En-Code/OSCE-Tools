@@ -22,20 +22,12 @@ limitations under the License.
 #include "clihelpers.h"
 #include "pqhelpers.h"
 
-struct Version {
-    char versionNum[256];
-    unsigned int releaseDate[3]; //0 for year, 1 for month, 2 for day
-    char programLang[256];
-    char license[256];
-    int xboard; //xboard and uci are bool-like
-    int uci;
-    char* notes;
-};
-
 inline void cliLoop(PGconn* conn) {
     char* input = (char*)cliMalloc(4096);
     input[0] = '\0';
-
+    char* engine_name;
+    int engine_id;
+    
     while (input[0] != 'Q') {
         cliListCommands();
         input[cliReadInput(input, 4096)] = '\0';
@@ -43,24 +35,32 @@ inline void cliLoop(PGconn* conn) {
         
         switch (input[0]) {
             case 'E':
-                listAllEngines(conn);
+                pqListAllEngines(conn);
                 break;
             case 'V':
-                char* engine_name = strchr(input, ' ');
+                engine_name = strchr(input, ' ');
                 if (engine_name == NULL) {
                     fprintf(stderr, "Name of engine expected.\n\n");
                     break;
                 }
-                listAllVersions(conn, engine_name + 1);
+                pqListAllVersions(conn, engine_name + 1);
                 break;
             case 'N':
-                char* new_engine_name = cliAllocEngineName();
+                engine_name = cliAllocInputString("Name of engine", 256);
                 char* author_names = cliAllocNDSeries("author", 256);
-                char* sources = cliAllocNDSeries("URI", 4096);
-                //cliAddNewVersion(conn);
-                free(new_engine_name);
+                //char* sources = cliAllocNDSeries("URI", 4096);
+                //version version_info = cliCreateNewVersion();
+                
+                engine_id = pqAddNewEngine(conn, engine_name);
+                if (engine_id != -1) {
+                    //pqAddNewAuthors(conn, engine_id, author_names);
+                    //pqAddNewSources(conn, engine_id, sources);
+                }
+                
+                free(engine_name);
                 free(author_names);
-                free(sources);
+                //free(sources);
+                //cliFreeVersion(version_info);
                 break;
             case 'Q':
                 // Intentional no error, since 'Q' quits loop.
@@ -114,21 +114,21 @@ inline void* cliRealloc(void* ptr, size_t size) {
     return new_ptr;
 }
 
-// Memory is allocated by this function to store the engine_name.
+// Memory is allocated by this function to store the input.
 // Free must be called when finished with the returned value.
-inline char* cliAllocEngineName() {
-    char* engine_name = (char*)cliMalloc(256);
-    engine_name[0] = '\0';
+inline char* cliAllocInputString(char* explan, int size) {
+    char* input = (char*)cliMalloc(size);
+    input[0] = '\0';
 
     do {
-        printf("Name of engine (cannot be empty): ");
-        engine_name[cliReadInput(engine_name, 256)] = '\0';
-	} while (engine_name[0] == '\0');
+        printf("%s (cannot be empty): ", explan);
+        input[cliReadInput(input, size)] = '\0';
+	} while (input[0] == '\0');
 	
-    return engine_name;
+    return input;
 }
 
-// Memory is allocated by this function to store author_names.
+// Memory is allocated by this function to store nd_strings.
 // Free must be called when finished with the returned value.
 // The format is a string of values, each value separated by a newline.
 inline char* cliAllocNDSeries(char* name, int size) {
@@ -166,4 +166,47 @@ inline char* cliAllocNDSeries(char* name, int size) {
     }
     
 	return nd_strings;
+}
+
+// Creates a new version struct.
+// This function allocates memory several times, so it has a special free
+// function, cliFreeVersion, to free everything when done with the struct.
+inline version cliCreateNewVersion() {
+    version version_data = {0};
+    char* buff = (char*)cliMalloc(4096);
+    
+    version_data.versionNum = cliAllocInputString("Version identifier", 256);
+    
+    while (version_data.releaseDate[0] == 0) {
+        printf("Year of release (number except 0): ");
+        cliReadInput(buff, 16);
+        version_data.releaseDate[0] = atoi(buff);
+    }
+    while (version_data.releaseDate[1] < 1 || version_data.releaseDate[1] > 12) {
+        printf("Month of release (number between 1 and 12): ");
+        cliReadInput(buff, 16);
+        version_data.releaseDate[1] = atoi(buff);
+    }
+    // TODO: There is a validation method for this, I'm sure, but I'm a little lazy atm.
+    while (version_data.releaseDate[2] < 1  || version_data.releaseDate[2] > 31) {
+        printf("Day of release (number between 1 and 31): ");
+        cliReadInput(buff, 16);
+        version_data.releaseDate[2] = atoi(buff);
+    }
+
+    version_data.programLang = cliAllocInputString("Programming language", 64);
+    version_data.license = cliAllocInputString("License", 64);
+
+    printf("Other notes about this version: ");
+    buff[cliReadInput(buff, 4096)] = '\0';
+    version_data.notes = buff;
+
+    return version_data;
+}
+
+inline void cliFreeVersion(version v) {
+    free(v.versionNum);
+    free(v.programLang);
+    free(v.license);
+    free(v.notes);
 }

@@ -20,7 +20,7 @@ limitations under the License.
 #include <libpq-fe.h>
 #include "pqhelpers.h"
 
-inline PGconn* initConnection(const char* conninfo) {
+inline PGconn* pqInitConnection(const char* conninfo) {
     PGconn*     conn;
     PGresult*   res;
     
@@ -58,7 +58,8 @@ inline PGconn* initConnection(const char* conninfo) {
 
 // If calling this function, it is assumed the result of the look-up
 // was successful and res contains table data.
-inline void printTable(PGresult* res) {
+inline void pqPrintTable(PGresult* res) {
+    // TODO: explore using PQprint for more robust output
     int nFields = PQnfields(res);
     for (int i = 0; i < nFields; i += 1) {
         printf("%-20s", PQfname(res, i));
@@ -73,7 +74,7 @@ inline void printTable(PGresult* res) {
     printf("\n");
 }
 
-inline void listAllEngines(PGconn* conn) {
+inline void pqListAllEngines(PGconn* conn) {
     PGresult* res;
     
     res = PQexec(conn,
@@ -83,12 +84,12 @@ inline void listAllEngines(PGconn* conn) {
         PQclear(res);
         return;
     }
-    printTable(res);
+    pqPrintTable(res);
     
     PQclear(res);
 }
 
-inline void listAllVersions(PGconn* conn, char* engine_name) {
+inline void pqListAllVersions(PGconn* conn, char* engine_name) {
     const char* paramValues[1];
     /*
     Note that it is neither necessary nor correct to do escaping when
@@ -116,7 +117,36 @@ inline void listAllVersions(PGconn* conn, char* engine_name) {
         PQclear(res);
         return;
     }
-    printTable(res);
+    pqPrintTable(res);
     
     PQclear(res);
+}
+
+// On success, returns the engine_id of the engine just inserted, and -1 on failure.
+inline int pqAddNewEngine(PGconn* conn, char* engine_name) {
+    const char* paramValues[1];
+    paramValues[0] = engine_name;
+    
+    PGresult* res;
+    res = PQexecParams(conn,
+                        "INSERT INTO engines (engine_name) VALUES ($1)"
+                        "RETURNING engine_id;", // PostgreSQL extension RETURNING
+                        1, NULL, paramValues, NULL, NULL, 0);
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+        fprintf(stderr, "INSERT failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        return -1;
+    }
+    int ret = atoi(PQgetvalue(res, 0, 0));
+    PQclear(res);
+    
+    return ret;
+}
+
+inline int pqAddNewAuthor(PGconn* conn, int engine_id, char* author) {
+    return 0;
+}
+
+inline int pqAddNewSource(PGconn* conn, int engine_id, char* source) {
+    return 0;
 }

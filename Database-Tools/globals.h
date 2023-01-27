@@ -14,16 +14,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include "globals.h"
+#ifndef GLOBALS_H
+#define GLOBALS_H
 
-extern void cliLoop(PGconn* conn);
-extern void	cliListCommands();
-extern int  cliReadInput(char* s, int size);
+typedef struct {
+    char* versionNum;
+    unsigned int releaseDate[3]; //0 for year, 1 for month, 2 for day
+    char* programLang;
+    char* license;
+    char protocol; //A bit mask. 1 is xboard compat, 2 is uci copmat.
+    char* notes;
+} version;
 
-extern void*    cliMalloc(size_t size);
-extern void*    cliRealloc(void* ptr, size_t size);
-
-extern char*    cliAllocInputString(char* explan, size_t size);
-extern char*    cliAllocNDSeries(char* name, size_t size);
-extern version  cliCreateNewVersion();
-extern void     cliFreeVersion(version v);
+#endif

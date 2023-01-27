@@ -48,29 +48,20 @@ inline void cliLoop(PGconn* conn) {
             case 'N':
                 engine_name = cliAllocInputString("Name of engine", 256);
                 char* author_names = cliAllocNDSeries("author", 256);
-                //char* sources = cliAllocNDSeries("URI", 4096);
-                //version version_info = cliCreateNewVersion();
+                char* sources = cliAllocNDSeries("URI", 4096);
+                version version_info = cliCreateNewVersion();
                 
-                engine_id = 1; //pqAddNewEngine(conn, engine_name);
+                engine_id = pqAddNewEngine(conn, engine_name);
                 if (engine_id != -1) {
-                    int start_loc = 0;
-                    int end_loc = strcspn((author_names + start_loc), "\n");
-                    while (start_loc != end_loc) {
-                        *(author_names + end_loc) = '\0';
-                        printf("%s %d %d\n", (author_names + start_loc), start_loc, end_loc);
-                        //pqAddNewAuthor(conn, engine_id, (author_names + start_loc));
-                        start_loc = end_loc + 1;
-                        end_loc = start_loc + strcspn((author_names + start_loc), "\n");
-                    }
-                    
-                    //pqAddNewAuthor(conn, engine_id, author_names);
-                    //pqAddNewSource(conn, engine_id, sources);
+                    pqAddNewNDAuthors(conn, engine_id, author_names);
+                    pqAddNewNDSources(conn, engine_id, sources);
+                    pqAddNewVersion(conn, engine_id, version_info);
                 }
                 
                 free(engine_name);
                 free(author_names);
-                //free(sources);
-                //cliFreeVersion(version_info);
+                free(sources);
+                cliFreeVersion(version_info);
                 break;
             case 'Q':
                 // Intentional no error, since 'Q' quits loop.
@@ -86,7 +77,7 @@ inline void cliListCommands() {
     printf("Accepted database commands:\n");
     printf("E (List all engines)\n");
     printf("V [NAME] (List all versions of all engines with name NAME)\n");
-    //printf("N (Create new engine)\n");
+    printf("N (Create new engine)\n");
     //printf("R (Create relation)\n");
     printf("Q (Quit)\n");
 }
@@ -188,24 +179,46 @@ inline version cliCreateNewVersion() {
     
     version_data.versionNum = cliAllocInputString("Version identifier", 256);
     
-    while (version_data.releaseDate[0] == 0) {
-        printf("Year of release (number except 0): ");
+    while (version_data.releaseDate[0] <= 0) {
+        printf("Year of release (number greater than 0): ");
         cliReadInput(buff, 16);
         version_data.releaseDate[0] = atoi(buff);
+    }
+    int month_len[12] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    if ((version_data.releaseDate[0] % 4 == 0 && version_data.releaseDate[0] % 100 != 0) ||
+        version_data.releaseDate[0] % 400 == 0) {
+        month_len[1] = 29;
     }
     while (version_data.releaseDate[1] < 1 || version_data.releaseDate[1] > 12) {
         printf("Month of release (number between 1 and 12): ");
         cliReadInput(buff, 16);
         version_data.releaseDate[1] = atoi(buff);
     }
-    // TODO: There is a validation method for this, I'm sure, but I'm a little lazy atm.
-    while (version_data.releaseDate[2] < 1  || version_data.releaseDate[2] > 31) {
-        printf("Day of release (number between 1 and 31): ");
+    
+    while (version_data.releaseDate[2] < 1 || version_data.releaseDate[2] > month_len[version_data.releaseDate[1] -1]) {
+        printf("Day of release (number between 1 and %d): ", month_len[version_data.releaseDate[1] -1]);
         cliReadInput(buff, 16);
         version_data.releaseDate[2] = atoi(buff);
     }
 
     version_data.programLang = cliAllocInputString("Programming language", 64);
+    
+    const char* protocols[2] = { "Xboard", "UCI" };
+    for (int i = 0; i <= 1; i++) {
+        while (1) {
+            printf("Does engine support %s protocol (Y/N, T/F)? ", protocols[i]);
+            cliReadInput(buff, 16);
+            buff[0] = toupper(buff[0]);
+            if (buff[0] == 'Y' || buff[0] == 'T') {
+                version_data.protocol |= (1 << i);
+                break;
+            }
+            if (buff[0] == 'N' || buff[0] == 'F') {
+                break;
+            }
+        }
+    }
+    
     version_data.license = cliAllocInputString("License", 64);
 
     printf("Other notes about this version: ");

@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+#include "globals.h"
+
 extern PGconn* pqInitConnection(const char* conninfo);
 extern void pqPrintTable(PGresult* res);
 
@@ -22,5 +24,8 @@ extern void pqListAllEnginesWithName(PGconn* conn, char* engine_name);
 extern void pqListAllVersions(PGconn* conn, char* engine_name);
 
 extern int  pqAddNewEngine(PGconn* conn, char* engine_name);
-extern int  pqAddNewAuthor(PGconn* conn, int engine_id, char* authors);
-extern int  pqAddNewSource(PGconn* conn, int engine_id, char* sources);
+extern int  pqAddNewNDSeries(PGconn* conn, int engine_id, char* nd_series, char** literals);
+extern int  pqAddNewElement(PGconn* conn, char* itoc_str, char* element, char** literals);
+extern int  pqAddNewNDAuthors(PGconn* conn, int engine_id, char* authors);
+extern int  pqAddNewNDSources(PGconn* conn, int engine_id, char* sources);
+extern int  pqAddNewVersion(PGconn* conn, int engine_id, version version_info);

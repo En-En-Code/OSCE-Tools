@@ -90,13 +90,12 @@ inline void pqListAllEngines(PGconn* conn) {
 }
 
 inline void pqListAllVersions(PGconn* conn, char* engine_name) {
-    const char* paramValues[1];
     /*
     Note that it is neither necessary nor correct to do escaping when
     a data value is passed as a separate parameter in PQexecParams.
         -- https://www.postgresql.org/docs/15/libpq-exec.html#LIBPQ-EXEC-ESCAPE-STRING
     */
-    paramValues[0] = engine_name;
+    const char* paramValues[1] = { engine_name };
 
     PGresult* res;
     /*
@@ -124,8 +123,7 @@ inline void pqListAllVersions(PGconn* conn, char* engine_name) {
 
 // On success, returns the engine_id of the engine just inserted, and -1 on failure.
 inline int pqAddNewEngine(PGconn* conn, char* engine_name) {
-    const char* paramValues[1];
-    paramValues[0] = engine_name;
+    const char* paramValues[1] = { engine_name };
     
     PGresult* res;
     res = PQexecParams(conn,
@@ -143,10 +141,86 @@ inline int pqAddNewEngine(PGconn* conn, char* engine_name) {
     return ret;
 }
 
-inline int pqAddNewAuthor(PGconn* conn, int engine_id, char* author) {
+// A helper function for inserting a newline-delimited series of strings into a database table
+inline int pqAddNewNDSeries(PGconn* conn, int engine_id, char* nd_series, char** literals) {
+    char itoc_str[25];
+    snprintf(itoc_str, 25, "%d", engine_id);
+    int ret = 0;
+    
+    int start_loc = 0;
+    int end_loc = strcspn((nd_series + start_loc), "\n");
+    while (start_loc != end_loc) {
+        *(nd_series + end_loc) = '\0';
+        if (pqAddNewElement(conn, itoc_str, (nd_series + start_loc), literals) == -1) {
+            ret = -1;
+        }
+        start_loc = end_loc + 1;
+        end_loc = start_loc + strcspn((nd_series + start_loc), "\n");
+    }
+    
+    return ret;
+}
+
+// A helper function for inserting individual string elements into a database table
+inline int pqAddNewElement(PGconn* conn, char* itoc_str, char* element, char** literals) {
+    const char* paramValues[2] = { itoc_str, element };
+    char query_maker[256];
+    snprintf(query_maker, 256, "INSERT INTO %s (engine_id, %s) VALUES ($1, $2);",
+                literals[0], literals[1]);
+    const char* query = query_maker;
+    
+    PGresult* res;
+    res = PQexecParams(conn, query, 2, NULL, paramValues, NULL, NULL, 0);
+    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
+        fprintf(stderr, "INSERT failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        return -1;
+    }
+    PQclear(res);
+    
     return 0;
 }
 
-inline int pqAddNewSource(PGconn* conn, int engine_id, char* source) {
+inline int pqAddNewNDAuthors(PGconn* conn, int engine_id, char* authors) {
+    char* literals[2] = {"authors", "author_name"};
+    return pqAddNewNDSeries(conn, engine_id, authors, literals);
+}
+
+inline int pqAddNewNDSources(PGconn* conn, int engine_id, char* sources) {
+    char* literals[2] = {"sources", "code_link"};
+    return pqAddNewNDSeries(conn, engine_id, sources, literals);
+}
+
+inline int pqAddNewVersion(PGconn* conn, int engine_id, version version_info) {
+    char itoc_str[25];
+    snprintf(itoc_str, 25, "%d", engine_id);
+    // Year-MM-DD, the most sane format
+    char itodate[40];
+    snprintf(itodate, 40, "%d-%d-%d",
+            version_info.releaseDate[0], version_info.releaseDate[1], version_info.releaseDate[2]);
+    
+    const char* paramValues[8] = {
+        itoc_str,
+        version_info.versionNum,
+        itodate,
+        version_info.programLang,
+        version_info.license,
+        (version_info.protocol & 1) ? "TRUE" : "FALSE",
+        (version_info.protocol & 2) ? "TRUE" : "FALSE",
+        version_info.notes
+    };
+    
+    PGresult* res;
+    res = PQexecParams(conn,
+                        "INSERT INTO versions (engine_id, version_num, release_date, "
+                        "program_lang, license, accepts_xboard, accepts_uci, notes) "
+                        "VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+                        8, NULL, paramValues, NULL, NULL, 0);
+    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
+        fprintf(stderr, "INSERT failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        return -1;
+    }
+    PQclear(res);
     return 0;
 }

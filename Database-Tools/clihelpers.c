@@ -51,10 +51,20 @@ inline void cliLoop(PGconn* conn) {
                 //char* sources = cliAllocNDSeries("URI", 4096);
                 //version version_info = cliCreateNewVersion();
                 
-                engine_id = pqAddNewEngine(conn, engine_name);
+                engine_id = 1; //pqAddNewEngine(conn, engine_name);
                 if (engine_id != -1) {
-                    //pqAddNewAuthors(conn, engine_id, author_names);
-                    //pqAddNewSources(conn, engine_id, sources);
+                    int start_loc = 0;
+                    int end_loc = strcspn((author_names + start_loc), "\n");
+                    while (start_loc != end_loc) {
+                        *(author_names + end_loc) = '\0';
+                        printf("%s %d %d\n", (author_names + start_loc), start_loc, end_loc);
+                        //pqAddNewAuthor(conn, engine_id, (author_names + start_loc));
+                        start_loc = end_loc + 1;
+                        end_loc = start_loc + strcspn((author_names + start_loc), "\n");
+                    }
+                    
+                    //pqAddNewAuthor(conn, engine_id, author_names);
+                    //pqAddNewSource(conn, engine_id, sources);
                 }
                 
                 free(engine_name);
@@ -88,7 +98,7 @@ inline int cliReadInput(char* s, int size) {
         fprintf(stderr, "fgets returned a NULLPTR.\n");
         exit(1);
     }
-    return strcspn(s, "\r\n");
+    return strcspn(s, "\n");
 }
 
 // Memory is allocated by this function to store ptr.
@@ -109,6 +119,7 @@ inline void* cliRealloc(void* ptr, size_t size) {
     void* new_ptr = realloc(ptr, size);
     if (new_ptr == NULL) {
         fprintf(stderr, "Not enough memory to perform allocation.\n");
+        free(ptr);
         exit(1);
     }
     return new_ptr;
@@ -116,7 +127,7 @@ inline void* cliRealloc(void* ptr, size_t size) {
 
 // Memory is allocated by this function to store the input.
 // Free must be called when finished with the returned value.
-inline char* cliAllocInputString(char* explan, int size) {
+inline char* cliAllocInputString(char* explan, size_t size) {
     char* input = (char*)cliMalloc(size);
     input[0] = '\0';
 
@@ -131,19 +142,19 @@ inline char* cliAllocInputString(char* explan, int size) {
 // Memory is allocated by this function to store nd_strings.
 // Free must be called when finished with the returned value.
 // The format is a string of values, each value separated by a newline.
-inline char* cliAllocNDSeries(char* name, int size) {
+inline char* cliAllocNDSeries(char* name, size_t size) {
     char* nd_strings = NULL;
     int total_bytes = 0;
 
     while (total_bytes == 0) {
-        int bytes_written = size;
+        int bytes_written = 0;
 
-        while (bytes_written > 0) {
-            nd_strings = (char*)cliRealloc(nd_strings, bytes_written);
+        do {
+            nd_strings = (char*)cliRealloc(nd_strings, total_bytes + size);
             printf("Enter one %s (Leave empty to finish adding %ss): ", name, name);
             bytes_written = cliReadInput(nd_strings + total_bytes, size);
             total_bytes += bytes_written + 1; //jump over the newline/stray terminator
-        }
+        } while (bytes_written > 0);
 
         // This might seem strange to do, but since a stray null terminator could 
         // be inserted, I need a length which I know to be accurate.

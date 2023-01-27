@@ -30,7 +30,7 @@ extern int  cliReadInput(char* s, int size);
 extern void*    cliMalloc(size_t size);
 extern void*    cliRealloc(void* ptr, size_t size);
 
-extern char*    cliAllocInputString(char* explan, int size);
-extern char*    cliAllocNDSeries(char* name, int size);
+extern char*    cliAllocInputString(char* explan, size_t size);
+extern char*    cliAllocNDSeries(char* name, size_t size);
 extern version  cliCreateNewVersion();
 extern void     cliFreeVersion(version v);

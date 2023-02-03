@@ -23,7 +23,10 @@ typedef struct {
     char* programLang;
     char* license;
     char protocol; //A bit mask. 1 is xboard compat, 2 is uci copmat.
-    char* notes;
+    char* note;
 } version;
+
+extern void* errhandMalloc(size_t size);
+extern void* errhandRealloc(void* ptr, size_t size);
 
 #endif

@@ -30,7 +30,7 @@ int main(int argc, char** argv) {
 
     conn = pqInitConnection(conninfo);
     
-    cliLoop(conn);
+    cliRootLoop(conn);
     
     PQfinish(conn);
     return 0;

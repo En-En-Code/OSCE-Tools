@@ -21,47 +21,66 @@ limitations under the License.
 #include <libpq-fe.h>
 #include "clihelpers.h"
 #include "pqhelpers.h"
+#include "globals.h"
 
-inline void cliLoop(PGconn* conn) {
-    char* input = (char*)cliMalloc(4096);
+inline void cliRootLoop(PGconn* conn) {
+    char* input = (char*)errhandMalloc(4096);
     input[0] = '\0';
     char* engine_name;
     int engine_id;
     
     while (input[0] != 'Q') {
-        cliListCommands();
+        cliListRootCommands();
         input[cliReadInput(input, 4096)] = '\0';
         input[0] = toupper(input[0]);
         
         switch (input[0]) {
             case 'E':
-                pqListAllEngines(conn);
-                break;
-            case 'V':
-                engine_name = strchr(input, ' ');
-                if (engine_name == NULL) {
-                    fprintf(stderr, "Name of engine expected.\n\n");
-                    break;
-                }
-                pqListAllVersions(conn, engine_name + 1);
+                pqListEngines(conn);
                 break;
             case 'N':
                 engine_name = cliAllocInputString("Name of engine", 256);
-                char* author_names = cliAllocNDSeries("author", 256);
-                char* sources = cliAllocNDSeries("URI", 4096);
-                version version_info = cliCreateNewVersion();
+                printf("Note(s) for every version of %s: ", engine_name);
+                input[cliReadInput(input, 4096)] = '\0';
+                engine_id = pqAddNewEngine(conn, engine_name, strlen(input)?input:NULL);
                 
-                engine_id = pqAddNewEngine(conn, engine_name);
+                //char* author_names = cliAllocNDSeries("author", 256);
+                //char* sources = cliAllocNDSeries("URI", 4096);
+                //version version_info = cliCreateNewVersion();
+                
                 if (engine_id != -1) {
-                    pqAddNewNDAuthors(conn, engine_id, author_names);
-                    pqAddNewNDSources(conn, engine_id, sources);
-                    pqAddNewVersion(conn, engine_id, version_info);
+                    cliEngineLoop(conn, engine_name, engine_id);
+                    //pqAddNewNDAuthors(conn, engine_id, author_names);
+                    //pqAddNewNDSources(conn, engine_id, sources);
+                    //pqAddNewVersion(conn, engine_id, version_info);
                 }
                 
                 free(engine_name);
-                free(author_names);
-                free(sources);
-                cliFreeVersion(version_info);
+                //free(author_names);
+                //free(sources);
+                //cliFreeVersion(version_info);
+                break;
+            case 'S':
+                engine_name = strchr(input, ' ');
+                if (engine_name == NULL) {
+                    fprintf(stderr, "Name of engine exepcted.\n\n");
+                    break;
+                }
+                engine_name += 1; // Move to the index after the space.
+                int* engine_id_list = pqAllocEngineIDsWithName(conn, engine_name);
+                if (engine_id_list == NULL || *engine_id_list == 0) {
+                    fprintf(stderr, "No engines found with name %s.\n\n", engine_name);
+                    break;
+                }
+                if (*engine_id_list == 1) {
+                    // Exactly one engine was found with that name, so use the found ID.
+                    engine_id = *(engine_id_list + 1);
+                } else {
+                    // Multiple engines were found with that name, so disambiguate them.
+                    
+                }
+                printf("\n");
+                cliEngineLoop(conn, engine_name, engine_id);
                 break;
             case 'Q':
                 // Intentional no error, since 'Q' quits loop.
@@ -73,13 +92,44 @@ inline void cliLoop(PGconn* conn) {
     free(input);
 }
 
-inline void cliListCommands() {
+inline void cliEngineLoop(PGconn* conn, char* engine_name, int engine_id) {
+    char* input = (char*)errhandMalloc(4096);
+    input[0] = '\0';
+    
+    while (input[0] != 'X') {
+        cliListEngineCommands(engine_name);
+        input[cliReadInput(input, 4096)] = '\0';
+        input[0] = toupper(input[0]);
+        
+        switch (input[0]) {
+            case 'V':
+                pqListAllVersions(conn, engine_name);
+                break;
+            case 'X':
+                //Intentional no error, since 'X' quits loop.
+                printf("\n");
+                break;
+            default:
+                fprintf(stderr, "Command %c not expected.\n\n", input[0]);
+        }
+    }
+    free(input);
+}
+
+inline void cliListRootCommands() {
     printf("Accepted database commands:\n");
     printf("E (List all engines)\n");
-    printf("V [NAME] (List all versions of all engines with name NAME)\n");
     printf("N (Create new engine)\n");
-    //printf("R (Create relation)\n");
+    printf("S [NAME] (Select existing engine)\n");
     printf("Q (Quit)\n");
+}
+
+inline void cliListEngineCommands(char* engine_name) {
+    printf("What would you like to do with %s?\n", engine_name);
+    printf("V (List all versions of %s)\n", engine_name);
+    //printf("A (New authors to engine)\n");
+    //printf("S (New source code links to engine)\n");
+    printf("X (Exit to the root menu)\n");
 }
 
 // An fgets-stdin wrapper which handles possible fgets errors.
@@ -92,34 +142,10 @@ inline int cliReadInput(char* s, int size) {
     return strcspn(s, "\n");
 }
 
-// Memory is allocated by this function to store ptr.
-// Free must be called when finished with the returned value.
-inline void* cliMalloc(size_t size) {
-    void* ptr = malloc(size);
-    if (ptr == NULL) {
-        fprintf(stderr, "Not enough memory to perform allocation.\n");
-        exit(1);
-    }
-    return ptr;
-}
-
-// Memory is allocated by this function to store new_ptr.
-// Free must be called when finished with the returned value.
-// Note this function can possibly free memory if size = 0.
-inline void* cliRealloc(void* ptr, size_t size) {
-    void* new_ptr = realloc(ptr, size);
-    if (new_ptr == NULL) {
-        fprintf(stderr, "Not enough memory to perform allocation.\n");
-        free(ptr);
-        exit(1);
-    }
-    return new_ptr;
-}
-
 // Memory is allocated by this function to store the input.
 // Free must be called when finished with the returned value.
 inline char* cliAllocInputString(char* explan, size_t size) {
-    char* input = (char*)cliMalloc(size);
+    char* input = (char*)errhandMalloc(size);
     input[0] = '\0';
 
     do {
@@ -141,7 +167,7 @@ inline char* cliAllocNDSeries(char* name, size_t size) {
         int bytes_written = 0;
 
         do {
-            nd_strings = (char*)cliRealloc(nd_strings, total_bytes + size);
+            nd_strings = (char*)errhandRealloc(nd_strings, total_bytes + size);
             printf("Enter one %s (Leave empty to finish adding %ss): ", name, name);
             bytes_written = cliReadInput(nd_strings + total_bytes, size);
             total_bytes += bytes_written + 1; //jump over the newline/stray terminator
@@ -162,7 +188,7 @@ inline char* cliAllocNDSeries(char* name, size_t size) {
         if (total_bytes == 0) {
             // Preparing to go again.
             free(nd_strings); // Free the memory, since we need to reallocate.
-            nd_strings = NULL; // If names is not null, cliRealloc would double free.
+            nd_strings = NULL; // If names is not null, errhandRealloc would double free.
             fprintf(stderr, "No %ss inserted. Minimum one %s needed.\n", name, name);
         }
     }
@@ -175,7 +201,7 @@ inline char* cliAllocNDSeries(char* name, size_t size) {
 // function, cliFreeVersion, to free everything when done with the struct.
 inline version cliCreateNewVersion() {
     version version_data = {0};
-    char* buff = (char*)cliMalloc(4096);
+    char* buff = (char*)errhandMalloc(4096);
     
     version_data.versionNum = cliAllocInputString("Version identifier", 256);
     
@@ -223,7 +249,7 @@ inline version cliCreateNewVersion() {
 
     printf("Other notes about this version: ");
     buff[cliReadInput(buff, 4096)] = '\0';
-    version_data.notes = buff;
+    version_data.note = buff;
 
     return version_data;
 }
@@ -232,5 +258,5 @@ inline void cliFreeVersion(version v) {
     free(v.versionNum);
     free(v.programLang);
     free(v.license);
-    free(v.notes);
+    free(v.note);
 }

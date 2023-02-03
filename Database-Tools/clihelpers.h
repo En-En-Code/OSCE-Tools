@@ -16,12 +16,11 @@ limitations under the License.
 
 #include "globals.h"
 
-extern void cliLoop(PGconn* conn);
-extern void	cliListCommands();
+extern void cliRootLoop(PGconn* conn);
+extern void cliEngineLoop(PGconn* conn, char* engine_name, int engine_id);
+extern void cliListRootCommands();
+extern void cliListEngineCommands(char* engine_name);
 extern int  cliReadInput(char* s, int size);
-
-extern void*    cliMalloc(size_t size);
-extern void*    cliRealloc(void* ptr, size_t size);
 
 extern char*    cliAllocInputString(char* explan, size_t size);
 extern char*    cliAllocNDSeries(char* name, size_t size);

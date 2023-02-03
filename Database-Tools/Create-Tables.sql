@@ -132,6 +132,7 @@ CREATE TABLE author (
     author_id   int PRIMARY KEY DEFAULT nextval('author_id_seq'),
     author_name varchar(255) NOT NULL   -- Author name, not guaranteed unique.
 );
+ALTER SEQUENCE author_id_seq OWNED BY author.author_id;
 
 -- A table relating engines to their authors.
 CREATE TABLE engine_authorship (

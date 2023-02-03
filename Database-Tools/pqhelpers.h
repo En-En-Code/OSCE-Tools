@@ -19,11 +19,13 @@ limitations under the License.
 extern PGconn* pqInitConnection(const char* conninfo);
 extern void pqPrintTable(PGresult* res);
 
-extern void pqListAllEngines(PGconn* conn);
-extern void pqListAllEnginesWithName(PGconn* conn, char* engine_name);
+extern void pqListEngines(PGconn* conn);
+extern int* pqAllocEngineIDsWithName(PGconn* conn, char* engine_name);
+extern void pqListEnginesWithName(PGconn* conn, char* engine_name);
+
 extern void pqListAllVersions(PGconn* conn, char* engine_name);
 
-extern int  pqAddNewEngine(PGconn* conn, char* engine_name);
+extern int  pqAddNewEngine(PGconn* conn, char* engine_name, char* note);
 extern int  pqAddNewNDSeries(PGconn* conn, int engine_id, char* nd_series, char** literals);
 extern int  pqAddNewElement(PGconn* conn, char* itoc_str, char* element, char** literals);
 extern int  pqAddNewNDAuthors(PGconn* conn, int engine_id, char* authors);

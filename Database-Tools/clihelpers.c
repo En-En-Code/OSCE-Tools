@@ -43,21 +43,14 @@ inline void cliRootLoop(PGconn* conn) {
                 printf("Note(s) for every version of %s: ", engine_name);
                 input[cliReadInput(input, 4096)] = '\0';
                 engine_id = pqAddNewEngine(conn, engine_name, strlen(input)?input:NULL);
-                
-                //char* author_names = cliAllocNDSeries("author", 256);
-                //char* sources = cliAllocNDSeries("URI", 4096);
                 //version version_info = cliCreateNewVersion();
                 
                 if (engine_id != -1) {
                     cliEngineLoop(conn, engine_name, engine_id);
-                    //pqAddNewNDAuthors(conn, engine_id, author_names);
-                    //pqAddNewNDSources(conn, engine_id, sources);
                     //pqAddNewVersion(conn, engine_id, version_info);
                 }
                 
                 free(engine_name);
-                //free(author_names);
-                //free(sources);
                 //cliFreeVersion(version_info);
                 break;
             case 'S':
@@ -67,20 +60,10 @@ inline void cliRootLoop(PGconn* conn) {
                     break;
                 }
                 engine_name += 1; // Move to the index after the space.
-                int* engine_id_list = pqAllocEngineIDsWithName(conn, engine_name);
-                if (engine_id_list == NULL || *engine_id_list == 0) {
-                    fprintf(stderr, "No engines found with name %s.\n\n", engine_name);
-                    break;
+                engine_id = cliObtainIdFromName(conn, engine_name);
+                if (engine_id != -1) {
+                    cliEngineLoop(conn, engine_name, engine_id);
                 }
-                if (*engine_id_list == 1) {
-                    // Exactly one engine was found with that name, so use the found ID.
-                    engine_id = *(engine_id_list + 1);
-                } else {
-                    // Multiple engines were found with that name, so disambiguate them.
-                    
-                }
-                printf("\n");
-                cliEngineLoop(conn, engine_name, engine_id);
                 break;
             case 'Q':
                 // Intentional no error, since 'Q' quits loop.
@@ -102,8 +85,20 @@ inline void cliEngineLoop(PGconn* conn, char* engine_name, int engine_id) {
         input[0] = toupper(input[0]);
         
         switch (input[0]) {
-            case 'V':
-                pqListAllVersions(conn, engine_name);
+            case 'P':
+                pqListAuthors(conn, engine_id);
+                pqListSources(conn, engine_id);
+                pqListVersions(conn, engine_id);
+                break;
+            case 'A':
+                char* author_names = cliAllocNDSeries("author", 256);
+                pqAddNewNDAuthors(conn, engine_id, author_names);
+                free(author_names);
+                break;
+            case 'S':
+                char* sources = cliAllocNDSeries("URI", 4096);
+                pqAddNewNDSources(conn, engine_id, sources);
+                free(sources);
                 break;
             case 'X':
                 //Intentional no error, since 'X' quits loop.
@@ -126,9 +121,9 @@ inline void cliListRootCommands() {
 
 inline void cliListEngineCommands(char* engine_name) {
     printf("What would you like to do with %s?\n", engine_name);
-    printf("V (List all versions of %s)\n", engine_name);
-    //printf("A (New authors to engine)\n");
-    //printf("S (New source code links to engine)\n");
+    printf("P (Print info for %s)\n", engine_name);
+    printf("A (Add new authors to %s)\n", engine_name);
+    printf("S (Add new source code links to %s)\n", engine_name);
     printf("X (Exit to the root menu)\n");
 }
 
@@ -194,6 +189,47 @@ inline char* cliAllocNDSeries(char* name, size_t size) {
     }
     
 	return nd_strings;
+}
+
+// A helper function, which determines the ID of an engine based on its name.
+// If multiple engines with the same name exist, asks for user to disambiguate.
+// Returns -1 if no engine with the name exists.
+inline int cliObtainIdFromName(PGconn* conn, char* engine_name) {
+    int engine_id = -1;
+    int* engine_id_list = pqAllocEngineIdsWithName(conn, engine_name);
+    if (engine_id_list == NULL || *engine_id_list == 0) {
+        fprintf(stderr, "No engines found with name %s.\n\n", engine_name);
+        return -1;
+    }
+    if (*engine_id_list == 1) {
+    // Exactly one engine was found with that name, so use the found ID.
+        engine_id = *(engine_id_list + 1);
+    } else {
+        // Multiple engines were found with that name, so disambiguate them.
+        char found_id = 0;
+        char* input = (char*)errhandMalloc(4096);
+        input[0] = '\0';
+        while (!found_id) {
+            printf("Multiple engines of the name %s found.\n", engine_name);
+            pqListEnginesWithName(conn, engine_name);
+            printf("Select an engine ID from the list to disambiguate: ");
+            input[cliReadInput(input, 4096)] = '\0';
+            engine_id = atoi(input);
+            for (int i = 0; i < *engine_id_list; i += 1) {
+                if (engine_id == *(engine_id_list + 1 + i)) {
+                    found_id = 1;
+                    break;
+                }
+            }
+            if (found_id == 0) {
+                fprintf(stderr, "ID %d not found in the ID list.\n", engine_id);
+            }
+        }
+        free(input);
+    }
+    printf("\n");
+    free(engine_id_list);
+    return engine_id;
 }
 
 // Creates a new version struct.

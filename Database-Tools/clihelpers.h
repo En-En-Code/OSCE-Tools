@@ -24,5 +24,6 @@ extern int  cliReadInput(char* s, int size);
 
 extern char*    cliAllocInputString(char* explan, size_t size);
 extern char*    cliAllocNDSeries(char* name, size_t size);
+extern int      cliObtainIdFromName(PGconn* conn, char* engine_name);
 extern version  cliCreateNewVersion();
 extern void     cliFreeVersion(version v);

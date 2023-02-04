@@ -20,14 +20,18 @@ extern PGconn* pqInitConnection(const char* conninfo);
 extern void pqPrintTable(PGresult* res);
 
 extern void pqListEngines(PGconn* conn);
-extern int* pqAllocEngineIDsWithName(PGconn* conn, char* engine_name);
+extern int* pqAllocEngineIdsWithName(PGconn* conn, char* engine_name);
 extern void pqListEnginesWithName(PGconn* conn, char* engine_name);
 
-extern void pqListAllVersions(PGconn* conn, char* engine_name);
+extern void pqListAuthors(PGconn* conn, int engine_id);
+extern void pqListSources(PGconn* conn, int engine_id);
+extern void pqListVersions(PGconn* conn, int engine_id);
 
 extern int  pqAddNewEngine(PGconn* conn, char* engine_name, char* note);
 extern int  pqAddNewNDSeries(PGconn* conn, int engine_id, char* nd_series, char** literals);
-extern int  pqAddNewElement(PGconn* conn, char* itoc_str, char* element, char** literals);
+extern int  pqGetNDElementId(PGconn* conn, char* element, char** literals);
+extern int  pqAddNewElement(PGconn* conn, char* itoc_str, int element_id, char** literals);
 extern int  pqAddNewNDAuthors(PGconn* conn, int engine_id, char* authors);
 extern int  pqAddNewNDSources(PGconn* conn, int engine_id, char* sources);
+
 extern int  pqAddNewVersion(PGconn* conn, int engine_id, version version_info);

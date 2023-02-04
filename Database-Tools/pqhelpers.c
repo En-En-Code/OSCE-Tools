@@ -91,7 +91,7 @@ inline void pqListEngines(PGconn* conn) {
 }
 
 // This function allocates an integer array, which needs to be freed when done.
-inline int* pqAllocEngineIDsWithName(PGconn* conn, char* engine_name) {
+inline int* pqAllocEngineIdsWithName(PGconn* conn, char* engine_name) {
     const char* paramValues[1] = { engine_name };
     PGresult* res;
     
@@ -134,13 +134,55 @@ inline void pqListEnginesWithName(PGconn* conn, char* engine_name) {
     PQclear(res);
 }
 
-inline void pqListAllVersions(PGconn* conn, char* engine_name) {
+inline void pqListAuthors(PGconn* conn, int engine_id) {
+    char itoc_str[25];
+    snprintf(itoc_str, 25, "%d", engine_id);
+    const char* paramValues[1] = { itoc_str };
+    
+    PGresult* res;
+    res = PQexecParams(conn,
+                        "SELECT author_name FROM author a "
+                        "JOIN engine e ON e.engine_id = $1",
+                        1, NULL, paramValues, NULL, NULL, 0);
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+        fprintf(stderr, "SELECT failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        return;
+    }
+    pqPrintTable(res);
+    
+    PQclear(res);
+}
+
+inline void pqListSources(PGconn* conn, int engine_id) {
+    char itoc_str[25];
+    snprintf(itoc_str, 25, "%d", engine_id);
+    const char* paramValues[1] = { itoc_str };
+    
+    PGresult* res;
+    res = PQexecParams(conn,
+                        "SELECT source_link FROM source s "
+                        "JOIN engine e ON e.engine_id = $1",
+                        1, NULL, paramValues, NULL, NULL, 0);
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+        fprintf(stderr, "SELECT failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        return;
+    }
+    pqPrintTable(res);
+    
+    PQclear(res);
+}
+
+inline void pqListVersions(PGconn* conn, int engine_id) {
     /*
     Note that it is neither necessary nor correct to do escaping when
     a data value is passed as a separate parameter in PQexecParams.
         -- https://www.postgresql.org/docs/15/libpq-exec.html#LIBPQ-EXEC-ESCAPE-STRING
     */
-    const char* paramValues[1] = { engine_name };
+    char itoc_str[25];
+    snprintf(itoc_str, 25, "%d", engine_id);
+    const char* paramValues[1] = { itoc_str };
 
     PGresult* res;
     /*
@@ -152,9 +194,9 @@ inline void pqListAllVersions(PGconn* conn, char* engine_name) {
         -- https://www.crunchydata.com/blog/preventing-sql-injection-attacks-in-postgresql
     */
     res = PQexecParams(conn,
-                        "SELECT engine_name, version_num, release_date, "
-                        "program_lang, license, accepts_xboard, accepts_uci, v.note "
-                        "FROM version v JOIN engine e ON v.engine_id = e.engine_id AND engine_name = $1;",
+                        "SELECT version_num, release_date, program_lang, "
+                        "license, accepts_xboard, accepts_uci, v.note "
+                        "FROM version v JOIN engine e ON v.engine_id = $1;",
                         1, NULL, paramValues, NULL, NULL, 0);
     if (PQresultStatus(res) != PGRES_TUPLES_OK) {
         fprintf(stderr, "SELECT failed: %s", PQerrorMessage(conn));
@@ -190,27 +232,76 @@ inline int pqAddNewEngine(PGconn* conn, char* engine_name, char* note) {
 inline int pqAddNewNDSeries(PGconn* conn, int engine_id, char* nd_series, char** literals) {
     char itoc_str[25];
     snprintf(itoc_str, 25, "%d", engine_id);
-    int ret = 0;
+    int rows = 0;
     
     int start_loc = 0;
     int end_loc = strcspn((nd_series + start_loc), "\n");
     while (start_loc != end_loc) {
         *(nd_series + end_loc) = '\0';
-        if (pqAddNewElement(conn, itoc_str, (nd_series + start_loc), literals) == -1) {
-            ret = -1;
+        int element_id = pqGetNDElementId(conn, (nd_series + start_loc), literals);
+        if (element_id == -1) {
+            return -1;
         }
+        if (pqAddNewElement(conn, itoc_str, element_id, literals) == -1) {
+            return -1;
+        }
+        rows += 1;
         start_loc = end_loc + 1;
         end_loc = start_loc + strcspn((nd_series + start_loc), "\n");
     }
+    
+    return rows;
+}
+
+// A helper function which searches the existing table for an entry, or inserts it.
+// Returns the id associated with the object on success, -1 on failure.
+inline int pqGetNDElementId(PGconn* conn, char* element, char** literals) {
+    const char* paramValues[1] = { element };
+    char query_maker[256];
+    snprintf(query_maker, 256,
+            "SELECT %s_id FROM %s WHERE %s = $1",
+            literals[1], literals[1], literals[2]);
+    const char* select_query = query_maker;
+    
+    PGresult* res;
+    res = PQexecParams(conn, select_query, 1, NULL, paramValues, NULL, NULL, 0);
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+        fprintf(stderr, "SELECT failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        return -1;
+    }
+    int ret = 0;
+    if (PQntuples(res)) {
+        ret = atoi(PQgetvalue(res, 0, 0));
+        PQclear(res);
+        return ret;
+    }
+    PQclear(res);
+    // Since the string is not already in the table, it needs to be inserted.
+    snprintf(query_maker, 256,
+            "INSERT INTO %s (%s) VALUES ($1) RETURNING %s_id;",
+            literals[1], literals[2], literals[1]);
+    const char* insert_query = query_maker;
+    
+    res = PQexecParams(conn, insert_query, 1, NULL, paramValues, NULL, NULL, 0);
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+        fprintf(stderr, "INSERT failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        return -1;
+    }
+    ret = atoi(PQgetvalue(res, 0, 0));
+    PQclear(res);
     
     return ret;
 }
 
 // A helper function for inserting individual string elements into a database table
-inline int pqAddNewElement(PGconn* conn, char* itoc_str, char* element, char** literals) {
-    const char* paramValues[2] = { itoc_str, element };
+inline int pqAddNewElement(PGconn* conn, char* itoc_str, int element_id, char** literals) {
+    char ndidc_str[25];
+    snprintf(ndidc_str, 25, "%d", element_id);
+    const char* paramValues[2] = { itoc_str, ndidc_str };
     char query_maker[256];
-    snprintf(query_maker, 256, "INSERT INTO %s (engine_id, %s) VALUES ($1, $2);",
+    snprintf(query_maker, 256, "INSERT INTO %s (engine_id, %s_id) VALUES ($1, $2);",
                 literals[0], literals[1]);
     const char* query = query_maker;
     
@@ -227,12 +318,12 @@ inline int pqAddNewElement(PGconn* conn, char* itoc_str, char* element, char** l
 }
 
 inline int pqAddNewNDAuthors(PGconn* conn, int engine_id, char* authors) {
-    char* literals[2] = {"author", "author_name"};
+    char* literals[3] = {"engine_authorship", "author", "author_name"};
     return pqAddNewNDSeries(conn, engine_id, authors, literals);
 }
 
 inline int pqAddNewNDSources(PGconn* conn, int engine_id, char* sources) {
-    char* literals[2] = {"source", "code_link"};
+    char* literals[3] = {"source_reference", "source", "source_link"};
     return pqAddNewNDSeries(conn, engine_id, sources, literals);
 }
 
@@ -258,7 +349,7 @@ inline int pqAddNewVersion(PGconn* conn, int engine_id, version version_info) {
     PGresult* res;
     res = PQexecParams(conn,
                         "INSERT INTO version (engine_id, version_num, release_date, "
-                        "program_lang, license, accepts_xboard, accepts_uci, notes) "
+                        "program_lang, license, accepts_xboard, accepts_uci, note) "
                         "VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
                         8, NULL, paramValues, NULL, NULL, 0);
     if (PQresultStatus(res) != PGRES_COMMAND_OK) {

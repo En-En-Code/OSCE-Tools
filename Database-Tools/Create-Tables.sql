@@ -141,12 +141,19 @@ CREATE TABLE engine_authorship (
     PRIMARY KEY (engine_id, author_id)
 );
 
--- A table relating engines to URIs where someone can access their code.
--- Kept separate from engines since code mirrors are possible, along with old code archives.
+-- A table storing information of where on the Internet the sources can be obtained from.
+CREATE SEQUENCE source_id_seq AS int;
 CREATE TABLE source (
+    source_id   int PRIMARY KEY DEFAULT nextval('source_id_seq'),
+    source_link text NOT NULL           -- A URI to the source code of the engine.
+);
+ALTER SEQUENCE source_id_seq OWNED BY source.source_id;
+
+-- A table relating engines to their sources.
+CREATE TABLE source_reference (
     engine_id   int REFERENCES engine (engine_id),
-    code_link   text NOT NULL,          -- A URI to the source code of the engine.
-    PRIMARY KEY (engine_id, code_link)
+    source_id   int REFERENCES source (source_id),
+    PRIMARY KEY (engine_id, source_id)
 );
 
 -- A table relating derivative engines to the engine(s) they originated from.

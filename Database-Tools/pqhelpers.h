@@ -28,9 +28,9 @@ extern void pqListSources(PGconn* conn, int engine_id);
 extern void pqListVersions(PGconn* conn, int engine_id);
 
 extern int  pqAddNewEngine(PGconn* conn, char* engine_name, char* note);
-extern int  pqAddNewNDSeries(PGconn* conn, int engine_id, char* nd_series, char** literals);
-extern int  pqGetNDElementId(PGconn* conn, char* element, char** literals);
-extern int  pqAddNewElement(PGconn* conn, char* itoc_str, int element_id, char** literals);
+extern int  pqAddNewNDSeries(PGconn* conn, int engine_id, char* nd_series, const char** literals);
+extern int  pqGetElementId(PGconn* conn, char* element, const char** literals);
+extern int  pqAddNewElement(PGconn* conn, char* itoc_str, int element_id, const char** literals);
 extern int  pqAddNewNDAuthors(PGconn* conn, int engine_id, char* authors);
 extern int  pqAddNewNDSources(PGconn* conn, int engine_id, char* sources);
 

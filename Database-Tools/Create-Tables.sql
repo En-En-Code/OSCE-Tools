@@ -87,6 +87,7 @@ INSERT INTO license (license_name) VALUES
     ('LGPL-2.1'),
     ('LGPL-3.0'),
     ('MPL-2.0'),
+    ('None'),                   -- Unlicensed code is assumed All Rights Reserved by default.
     ('Unlicense'),
     ('WTFPL'),
     ('Zlib');
@@ -187,8 +188,8 @@ CREATE TABLE version (
     engine_id       int REFERENCES engine (engine_id),
     version_num     varchar(255) NOT NULL,  -- The version number, e.g. 1.0, TCEC_v2, origin/HEAD.
     release_date    date NOT NULL,          -- Release date/date of last commit (for origin/HEAD).
-    program_lang    int REFERENCES code_lang (code_lang_id),
-    license         int REFERENCES license (license_id),
+    code_lang_id    int REFERENCES code_lang (code_lang_id),
+    license_id      int REFERENCES license (license_id),
     accepts_xboard  bool NOT NULL,          -- Can the program interface with Xboard?
     accepts_uci     bool NOT NULL,          -- Can the program interface with UCI?
     note            text                    -- Custom documentation/notes.

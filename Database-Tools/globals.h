@@ -14,12 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+#include <time.h>
+
 #ifndef GLOBALS_H
 #define GLOBALS_H
 
 typedef struct {
     char* versionNum;
-    unsigned int releaseDate[3]; //0 for year, 1 for month, 2 for day
+    struct tm releaseDate;
     char* programLang;
     char* license;
     char protocol; //A bit mask. 1 is xboard compat, 2 is uci copmat.

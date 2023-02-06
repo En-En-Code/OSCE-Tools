@@ -17,6 +17,7 @@ limitations under the License.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <libpq-fe.h>
 #include "pqhelpers.h"
 #include "globals.h"
@@ -60,19 +61,15 @@ inline PGconn* pqInitConnection(const char* conninfo) {
 // If calling this function, it is assumed the result of the look-up
 // was successful and res contains table data.
 inline void pqPrintTable(PGresult* res) {
-    // TODO: explore using PQprint for more robust output
-    int nFields = PQnfields(res);
-    for (int i = 0; i < nFields; i += 1) {
-        printf("%-20s", PQfname(res, i));
-    }
-    printf("\n");
+    // Print the table in a format similar to JSON or Rust's debug print
+    printf("[");
     for (int i = 0; i < PQntuples(res); i += 1) {
-        for (int j = 0; j < nFields; j += 1) {
-            printf("%-20s", PQgetvalue(res, i, j));
-        }
         printf("\n");
+        for (int j = 0; j < PQnfields(res); j += 1) {
+            printf("  %-15s: %s\n", PQfname(res, j), PQgetvalue(res, i, j));
+        }
     }
-    printf("\n");
+    printf("]\n");
 }
 
 inline void pqListEngines(PGconn* conn) {
@@ -120,9 +117,11 @@ inline void pqListEnginesWithName(PGconn* conn, char* engine_name) {
     const char* paramValues[1] = { engine_name };
     PGresult* res;
     
+    // I could maybe insert authors as well, but forming a Cartesian product seems annoying.
     res = PQexecParams(conn,
-        "SELECT engine_id, engine_name, note FROM engine e "
-        "LEFT OUTER JOIN sources s ON s.engine_id = e.engine_id AND engine_name = $1;",
+        "SELECT e.engine_id, engine_name, note, source_link "
+        "FROM (SELECT * FROM source_reference JOIN source USING (source_id)) temp "
+        "RIGHT OUTER JOIN engine e USING (engine_id) WHERE engine_name = $1;",
         1, NULL, paramValues, NULL, NULL, 0);
     if (PQresultStatus(res) != PGRES_TUPLES_OK) {
         fprintf(stderr, "SELECT failed: %s", PQerrorMessage(conn));
@@ -141,8 +140,8 @@ inline void pqListAuthors(PGconn* conn, int engine_id) {
     
     PGresult* res;
     res = PQexecParams(conn,
-                        "SELECT author_name FROM author a "
-                        "JOIN engine e ON e.engine_id = $1",
+                        "SELECT author_name FROM author "
+                        "JOIN engine_authorship USING (author_id) WHERE engine_id = $1",
                         1, NULL, paramValues, NULL, NULL, 0);
     if (PQresultStatus(res) != PGRES_TUPLES_OK) {
         fprintf(stderr, "SELECT failed: %s", PQerrorMessage(conn));
@@ -161,8 +160,8 @@ inline void pqListSources(PGconn* conn, int engine_id) {
     
     PGresult* res;
     res = PQexecParams(conn,
-                        "SELECT source_link FROM source s "
-                        "JOIN engine e ON e.engine_id = $1",
+                        "SELECT source_link FROM source "
+                        "JOIN source_reference USING (source_id) WHERE engine_id = $1",
                         1, NULL, paramValues, NULL, NULL, 0);
     if (PQresultStatus(res) != PGRES_TUPLES_OK) {
         fprintf(stderr, "SELECT failed: %s", PQerrorMessage(conn));
@@ -194,9 +193,10 @@ inline void pqListVersions(PGconn* conn, int engine_id) {
         -- https://www.crunchydata.com/blog/preventing-sql-injection-attacks-in-postgresql
     */
     res = PQexecParams(conn,
-                        "SELECT version_num, release_date, program_lang, "
-                        "license, accepts_xboard, accepts_uci, v.note "
-                        "FROM version v JOIN engine e ON v.engine_id = $1;",
+                        "SELECT version_num, release_date, code_lang_name, "
+                        "license_name, accepts_xboard, accepts_uci, v.note "
+                        "FROM version v JOIN engine USING (engine_id) JOIN license USING (license_id) "
+                        "JOIN code_lang USING (code_lang_id) WHERE v.engine_id = $1;",
                         1, NULL, paramValues, NULL, NULL, 0);
     if (PQresultStatus(res) != PGRES_TUPLES_OK) {
         fprintf(stderr, "SELECT failed: %s", PQerrorMessage(conn));
@@ -229,7 +229,7 @@ inline int pqAddNewEngine(PGconn* conn, char* engine_name, char* note) {
 }
 
 // A helper function for inserting a newline-delimited series of strings into a database table
-inline int pqAddNewNDSeries(PGconn* conn, int engine_id, char* nd_series, char** literals) {
+inline int pqAddNewNDSeries(PGconn* conn, int engine_id, char* nd_series, const char** literals) {
     char itoc_str[25];
     snprintf(itoc_str, 25, "%d", engine_id);
     int rows = 0;
@@ -238,7 +238,7 @@ inline int pqAddNewNDSeries(PGconn* conn, int engine_id, char* nd_series, char**
     int end_loc = strcspn((nd_series + start_loc), "\n");
     while (start_loc != end_loc) {
         *(nd_series + end_loc) = '\0';
-        int element_id = pqGetNDElementId(conn, (nd_series + start_loc), literals);
+        int element_id = pqGetElementId(conn, (nd_series + start_loc), literals);
         if (element_id == -1) {
             return -1;
         }
@@ -255,7 +255,7 @@ inline int pqAddNewNDSeries(PGconn* conn, int engine_id, char* nd_series, char**
 
 // A helper function which searches the existing table for an entry, or inserts it.
 // Returns the id associated with the object on success, -1 on failure.
-inline int pqGetNDElementId(PGconn* conn, char* element, char** literals) {
+inline int pqGetElementId(PGconn* conn, char* element, const char** literals) {
     const char* paramValues[1] = { element };
     char query_maker[256];
     snprintf(query_maker, 256,
@@ -296,7 +296,7 @@ inline int pqGetNDElementId(PGconn* conn, char* element, char** literals) {
 }
 
 // A helper function for inserting individual string elements into a database table
-inline int pqAddNewElement(PGconn* conn, char* itoc_str, int element_id, char** literals) {
+inline int pqAddNewElement(PGconn* conn, char* itoc_str, int element_id, const char** literals) {
     char ndidc_str[25];
     snprintf(ndidc_str, 25, "%d", element_id);
     const char* paramValues[2] = { itoc_str, ndidc_str };
@@ -318,12 +318,12 @@ inline int pqAddNewElement(PGconn* conn, char* itoc_str, int element_id, char** 
 }
 
 inline int pqAddNewNDAuthors(PGconn* conn, int engine_id, char* authors) {
-    char* literals[3] = {"engine_authorship", "author", "author_name"};
+    const char* literals[3] = {"engine_authorship", "author", "author_name"};
     return pqAddNewNDSeries(conn, engine_id, authors, literals);
 }
 
 inline int pqAddNewNDSources(PGconn* conn, int engine_id, char* sources) {
-    char* literals[3] = {"source_reference", "source", "source_link"};
+    const char* literals[3] = {"source_reference", "source", "source_link"};
     return pqAddNewNDSeries(conn, engine_id, sources, literals);
 }
 
@@ -331,16 +331,25 @@ inline int pqAddNewVersion(PGconn* conn, int engine_id, version version_info) {
     char itoc_str[25];
     snprintf(itoc_str, 25, "%d", engine_id);
     // Year-MM-DD, the most sane format
-    char itodate[40];
-    snprintf(itodate, 40, "%d-%d-%d",
-            version_info.releaseDate[0], version_info.releaseDate[1], version_info.releaseDate[2]);
+    char tmtodate[40];
+    strftime(tmtodate, 40, "%Y-%m-%d", &version_info.releaseDate);
+    
+    const char* code_lang_literals[3] = {NULL, "code_lang", "code_lang_name"};
+    int code_link_id = pqGetElementId(conn, version_info.programLang, code_lang_literals);
+    char code_link_id_str[25];
+    snprintf(code_link_id_str, 25, "%d", code_link_id);
+    
+    const char* license_literals[3] = {NULL, "license", "license_name"};
+    int license_id = pqGetElementId(conn, version_info.license, license_literals);
+    char license_id_str[25];
+    snprintf(license_id_str, 25, "%d", license_id);
     
     const char* paramValues[8] = {
         itoc_str,
         version_info.versionNum,
-        itodate,
-        version_info.programLang,
-        version_info.license,
+        tmtodate,
+        code_link_id_str,
+        license_id_str,
         (version_info.protocol & 1) ? "TRUE" : "FALSE",
         (version_info.protocol & 2) ? "TRUE" : "FALSE",
         version_info.note
@@ -349,7 +358,7 @@ inline int pqAddNewVersion(PGconn* conn, int engine_id, version version_info) {
     PGresult* res;
     res = PQexecParams(conn,
                         "INSERT INTO version (engine_id, version_num, release_date, "
-                        "program_lang, license, accepts_xboard, accepts_uci, note) "
+                        "code_lang_id, license_id, accepts_xboard, accepts_uci, note) "
                         "VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
                         8, NULL, paramValues, NULL, NULL, 0);
     if (PQresultStatus(res) != PGRES_COMMAND_OK) {

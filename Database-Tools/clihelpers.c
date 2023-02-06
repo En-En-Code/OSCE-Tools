@@ -43,15 +43,10 @@ inline void cliRootLoop(PGconn* conn) {
                 printf("Note(s) for every version of %s: ", engine_name);
                 input[cliReadInput(input, 4096)] = '\0';
                 engine_id = pqAddNewEngine(conn, engine_name, strlen(input)?input:NULL);
-                //version version_info = cliCreateNewVersion();
-                
                 if (engine_id != -1) {
                     cliEngineLoop(conn, engine_name, engine_id);
-                    //pqAddNewVersion(conn, engine_id, version_info);
                 }
-                
                 free(engine_name);
-                //cliFreeVersion(version_info);
                 break;
             case 'S':
                 engine_name = strchr(input, ' ');
@@ -100,6 +95,12 @@ inline void cliEngineLoop(PGconn* conn, char* engine_name, int engine_id) {
                 pqAddNewNDSources(conn, engine_id, sources);
                 free(sources);
                 break;
+            case 'V':
+                version version_info = cliCreateNewVersion();
+                pqAddNewVersion(conn, engine_id, version_info);
+                char tmtodate[40];
+                cliFreeVersion(version_info);
+                break;
             case 'X':
                 //Intentional no error, since 'X' quits loop.
                 printf("\n");
@@ -124,6 +125,7 @@ inline void cliListEngineCommands(char* engine_name) {
     printf("P (Print info for %s)\n", engine_name);
     printf("A (Add new authors to %s)\n", engine_name);
     printf("S (Add new source code links to %s)\n", engine_name);
+    printf("V (Add new version of %s)\n", engine_name);
     printf("X (Exit to the root menu)\n");
 }
 
@@ -241,27 +243,29 @@ inline version cliCreateNewVersion() {
     
     version_data.versionNum = cliAllocInputString("Version identifier", 256);
     
-    while (version_data.releaseDate[0] <= 0) {
-        printf("Year of release (number greater than 0): ");
+    struct tm release_date = { .tm_year = -1, .tm_mon = -1, .tm_mday = -1 };
+    while (release_date.tm_year <= 0) {
+        printf("Year of release (number greater than 1900): ");
         cliReadInput(buff, 16);
-        version_data.releaseDate[0] = atoi(buff);
+        release_date.tm_year = atoi(buff) - 1900;
     }
     int month_len[12] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
-    if ((version_data.releaseDate[0] % 4 == 0 && version_data.releaseDate[0] % 100 != 0) ||
-        version_data.releaseDate[0] % 400 == 0) {
+    if ((release_date.tm_year % 4 == 0 && release_date.tm_year % 100 != 0) ||
+        release_date.tm_year % 400 == 0) {
         month_len[1] = 29;
     }
-    while (version_data.releaseDate[1] < 1 || version_data.releaseDate[1] > 12) {
+    while (release_date.tm_mon < 0 || release_date.tm_mon > 11) {
         printf("Month of release (number between 1 and 12): ");
         cliReadInput(buff, 16);
-        version_data.releaseDate[1] = atoi(buff);
+        release_date.tm_mon = atoi(buff) - 1;
     }
     
-    while (version_data.releaseDate[2] < 1 || version_data.releaseDate[2] > month_len[version_data.releaseDate[1] -1]) {
-        printf("Day of release (number between 1 and %d): ", month_len[version_data.releaseDate[1] -1]);
+    while (release_date.tm_mday < 1 || release_date.tm_mday > month_len[release_date.tm_mon]) {
+        printf("Day of release (number between 1 and %d): ", month_len[release_date.tm_mon]);
         cliReadInput(buff, 16);
-        version_data.releaseDate[2] = atoi(buff);
+        release_date.tm_mday = atoi(buff);
     }
+    version_data.releaseDate = release_date;
 
     version_data.programLang = cliAllocInputString("Programming language", 64);
     

@@ -28,7 +28,15 @@ typedef struct {
     char* note;
 } version;
 
+typedef struct {
+    char* uri;
+    char* vcs;
+} code_link;
+
 extern void* errhandMalloc(size_t size);
 extern void* errhandRealloc(void* ptr, size_t size);
+
+extern void  freeVersion(version v);
+extern void  freeCodeLink(code_link cl);
 
 #endif

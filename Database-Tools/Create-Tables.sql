@@ -18,6 +18,20 @@ limitations under the License.
 CREATE SCHEMA engine;
 SET search_path TO engine;
 
+-- A list of version control systems used by open source project
+CREATE SEQUENCE vcs_id_seq AS int;
+CREATE TABLE vcs (
+    vcs_id      int PRIMARY KEY DEFAULT nextval('vcs_id_seq'),
+    vcs_name    varchar(64) NOT NULL    -- The name of the version control system
+);
+ALTER SEQUENCE vcs_id_seq OWNED BY vcs.vcs_id;
+INSERT INTO vcs (vcs_name) VALUES
+    ('rhv'),    -- Code found on an archive (e.g. Wayback Machine, Google Code)
+    ('n/a'),    -- Non-archive source code not hosted with a VCS.
+    ('git'),
+    ('svn'),
+    ('cvs');
+
 -- A list of programming languages engines have been written in.
 CREATE SEQUENCE code_lang_id_seq AS int;
 CREATE TABLE code_lang (
@@ -146,7 +160,8 @@ CREATE TABLE engine_authorship (
 CREATE SEQUENCE source_id_seq AS int;
 CREATE TABLE source (
     source_id   int PRIMARY KEY DEFAULT nextval('source_id_seq'),
-    source_link text NOT NULL           -- A URI to the source code of the engine.
+    source_uri  text NOT NULL,          -- A URI to the source code of the engine.
+    vcs_id      int REFERENCES vcs (vcs_id)
 );
 ALTER SEQUENCE source_id_seq OWNED BY source.source_id;
 

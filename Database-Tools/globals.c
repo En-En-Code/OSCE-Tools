@@ -42,3 +42,15 @@ inline void* errhandRealloc(void* ptr, size_t size) {
     return new_ptr;
 }
 
+// Frees a version struct created with previous calls to malloc on each char* element
+inline void freeVersion(version v) {
+    free(v.versionNum);
+    free(v.programLang);
+    free(v.license);
+    free(v.note);
+}
+
+inline void freeCodeLink(code_link cl) {
+    free(cl.uri);
+    free(cl.vcs);
+}

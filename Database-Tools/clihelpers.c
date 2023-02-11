@@ -91,15 +91,14 @@ inline void cliEngineLoop(PGconn* conn, char* engine_name, int engine_id) {
                 free(author_names);
                 break;
             case 'S':
-                char* sources = cliAllocNDSeries("URI", 4096);
-                pqAddNewNDSources(conn, engine_id, sources);
-                free(sources);
+                code_link source = cliAllocCodeLink();
+                pqAddNewSource(conn, engine_id, source);
+                freeCodeLink(source);
                 break;
             case 'V':
-                version version_info = cliCreateNewVersion();
+                version version_info = cliAllocVersion();
                 pqAddNewVersion(conn, engine_id, version_info);
-                char tmtodate[40];
-                cliFreeVersion(version_info);
+                freeVersion(version_info);
                 break;
             case 'X':
                 //Intentional no error, since 'X' quits loop.
@@ -124,7 +123,7 @@ inline void cliListEngineCommands(char* engine_name) {
     printf("What would you like to do with %s?\n", engine_name);
     printf("P (Print info for %s)\n", engine_name);
     printf("A (Add new authors to %s)\n", engine_name);
-    printf("S (Add new source code links to %s)\n", engine_name);
+    printf("S (Add new source code URI to %s)\n", engine_name);
     printf("V (Add new version of %s)\n", engine_name);
     printf("X (Exit to the root menu)\n");
 }
@@ -234,10 +233,20 @@ inline int cliObtainIdFromName(PGconn* conn, char* engine_name) {
     return engine_id;
 }
 
+// Creates a new code_link struct.
+// This function allocates memory 2 times, so it has a special free
+// function, freeCodeLink, to fre everything when done with the struct.
+inline code_link cliAllocCodeLink() {
+    code_link codeLink = {0};
+    codeLink.uri = cliAllocInputString("Source URI", 4096);
+    codeLink.vcs = cliAllocInputString("3-letter version control system abbrievation", 4);
+    return codeLink;
+}
+
 // Creates a new version struct.
 // This function allocates memory several times, so it has a special free
-// function, cliFreeVersion, to free everything when done with the struct.
-inline version cliCreateNewVersion() {
+// function, freeVersion, to free everything when done with the struct.
+inline version cliAllocVersion() {
     version version_data = {0};
     char* buff = (char*)errhandMalloc(4096);
     
@@ -292,11 +301,4 @@ inline version cliCreateNewVersion() {
     version_data.note = buff;
 
     return version_data;
-}
-
-inline void cliFreeVersion(version v) {
-    free(v.versionNum);
-    free(v.programLang);
-    free(v.license);
-    free(v.note);
 }

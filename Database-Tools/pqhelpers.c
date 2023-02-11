@@ -119,7 +119,7 @@ inline void pqListEnginesWithName(PGconn* conn, char* engine_name) {
     
     // I could maybe insert authors as well, but forming a Cartesian product seems annoying.
     res = PQexecParams(conn,
-        "SELECT e.engine_id, engine_name, note, source_link "
+        "SELECT e.engine_id, engine_name, note, source_uri "
         "FROM (SELECT * FROM source_reference JOIN source USING (source_id)) temp "
         "RIGHT OUTER JOIN engine e USING (engine_id) WHERE engine_name = $1;",
         1, NULL, paramValues, NULL, NULL, 0);
@@ -160,7 +160,7 @@ inline void pqListSources(PGconn* conn, int engine_id) {
     
     PGresult* res;
     res = PQexecParams(conn,
-                        "SELECT source_link FROM source "
+                        "SELECT source_uri, vcs_name FROM source JOIN vcs USING (vcs_id) "
                         "JOIN source_reference USING (source_id) WHERE engine_id = $1",
                         1, NULL, paramValues, NULL, NULL, 0);
     if (PQresultStatus(res) != PGRES_TUPLES_OK) {
@@ -229,6 +229,9 @@ inline int pqAddNewEngine(PGconn* conn, char* engine_name, char* note) {
 }
 
 // A helper function for inserting a newline-delimited series of strings into a database table
+// literals[0] contains the name of the relational table (e.g. engine_authorship, source_reference)
+// literals[1] contains the name of the id table (e.g. author, source)
+// literals[2] contains the name of the value in the id table (e.g. author_name, source_uri)
 inline int pqAddNewNDSeries(PGconn* conn, int engine_id, char* nd_series, const char** literals) {
     char itoc_str[25];
     snprintf(itoc_str, 25, "%d", engine_id);
@@ -238,11 +241,11 @@ inline int pqAddNewNDSeries(PGconn* conn, int engine_id, char* nd_series, const 
     int end_loc = strcspn((nd_series + start_loc), "\n");
     while (start_loc != end_loc) {
         *(nd_series + end_loc) = '\0';
-        int element_id = pqGetElementId(conn, (nd_series + start_loc), literals);
+        int element_id = pqGetElementId(conn, (nd_series + start_loc), literals, 1);
         if (element_id == -1) {
             return -1;
         }
-        if (pqAddNewElement(conn, itoc_str, element_id, literals) == -1) {
+        if (pqAddRelation(conn, itoc_str, element_id, literals) == -1) {
             return -1;
         }
         rows += 1;
@@ -253,9 +256,14 @@ inline int pqAddNewNDSeries(PGconn* conn, int engine_id, char* nd_series, const 
     return rows;
 }
 
-// A helper function which searches the existing table for an entry, or inserts it.
+// A helper function which searches the existing table for an entry.
+// literals[0] contains the name of the relational table (e.g. engine_authorship, source_reference)
+// literals[1] contains the name of the id table (e.g. author, source)
+// literals[2] contains the name of the value in the id table (e.g. author_name, source_uri)
+// If insert_on_fail is 0, not finding the element in the table returns a failure value.
+// If insert_on_fail is 1, not finding the element results in the element being inserted.
 // Returns the id associated with the object on success, -1 on failure.
-inline int pqGetElementId(PGconn* conn, char* element, const char** literals) {
+inline int pqGetElementId(PGconn* conn, char* element, const char** literals, int insert_on_fail) {
     const char* paramValues[1] = { element };
     char query_maker[256];
     snprintf(query_maker, 256,
@@ -270,13 +278,16 @@ inline int pqGetElementId(PGconn* conn, char* element, const char** literals) {
         PQclear(res);
         return -1;
     }
-    int ret = 0;
+    int ret = -1;
     if (PQntuples(res)) {
         ret = atoi(PQgetvalue(res, 0, 0));
         PQclear(res);
         return ret;
     }
     PQclear(res);
+    if (!insert_on_fail) {
+        return -1;
+    }
     // Since the string is not already in the table, it needs to be inserted.
     snprintf(query_maker, 256,
             "INSERT INTO %s (%s) VALUES ($1) RETURNING %s_id;",
@@ -295,8 +306,11 @@ inline int pqGetElementId(PGconn* conn, char* element, const char** literals) {
     return ret;
 }
 
-// A helper function for inserting individual string elements into a database table
-inline int pqAddNewElement(PGconn* conn, char* itoc_str, int element_id, const char** literals) {
+// A helper function for inserting individual relations into a relational database table
+// literals[0] contains the name of the relational table (e.g. engine_authorship, source_reference)
+// literals[1] contains the name of the inserted object (e.g. author, source)
+// literals[2] contains the name of the value in the id table (e.g. author_name, source_uri)
+inline int pqAddRelation(PGconn* conn, char* itoc_str, int element_id, const char** literals) {
     char ndidc_str[25];
     snprintf(ndidc_str, 25, "%d", element_id);
     const char* paramValues[2] = { itoc_str, ndidc_str };
@@ -318,13 +332,54 @@ inline int pqAddNewElement(PGconn* conn, char* itoc_str, int element_id, const c
 }
 
 inline int pqAddNewNDAuthors(PGconn* conn, int engine_id, char* authors) {
-    const char* literals[3] = {"engine_authorship", "author", "author_name"};
+    const char* literals[3] = { "engine_authorship", "author", "author_name" };
     return pqAddNewNDSeries(conn, engine_id, authors, literals);
 }
 
-inline int pqAddNewNDSources(PGconn* conn, int engine_id, char* sources) {
-    const char* literals[3] = {"source_reference", "source", "source_link"};
-    return pqAddNewNDSeries(conn, engine_id, sources, literals);
+// Add a new source link if it does not exist, or retrieve its ID if it does.
+// Then, add a relation between in source_reference behind an engine and the source.
+inline int pqAddNewSource(PGconn* conn, int engine_id, code_link source) {
+    char itoc_str[25];
+    snprintf(itoc_str, 25, "%d", engine_id);
+    const char* vcsParamValues[1] = { source.vcs };
+    
+    PGresult* res_vcs;
+    res_vcs = PQexecParams(conn,
+                            "SELECT vcs_id FROM vcs WHERE vcs_name = $1;",
+                            1, NULL, vcsParamValues, NULL, NULL, 0);
+    if (PQresultStatus(res_vcs) != PGRES_TUPLES_OK) {
+        fprintf(stderr, "SELECT failed: %s", PQerrorMessage(conn));
+        PQclear(res_vcs);
+        return -1;
+    }
+    if (!PQntuples(res_vcs)) {
+        fprintf(stderr, "%s is not a recognized version control system.\n", source.vcs);
+        PQclear(res_vcs);
+        return -1;
+    }
+    char* vcs = PQgetvalue(res_vcs, 0, 0);
+    const char* sourceParamValues[2] = { source.uri, vcs };
+    
+    PGresult* res_source;
+    res_source = PQexecParams(conn,
+                                "INSERT INTO source (source_uri, vcs_id)"
+                                "VALUES ($1, $2) RETURNING source_id;",
+                                2, NULL, sourceParamValues, NULL, NULL, 0);
+    if (PQresultStatus(res_source) != PGRES_TUPLES_OK) {
+        fprintf(stderr, "INSERT failed: %s", PQerrorMessage(conn));
+        PQclear(res_vcs);
+        PQclear(res_source);
+        return -1;
+    }
+    int source_id = atoi(PQgetvalue(res_source, 0, 0));
+    
+    const char* literals[2] = { "source_reference", "source" };
+    int ret = pqAddRelation(conn, itoc_str, source_id, literals);
+    
+    PQclear(res_vcs);
+    PQclear(res_source);
+    
+    return ret;
 }
 
 inline int pqAddNewVersion(PGconn* conn, int engine_id, version version_info) {
@@ -335,12 +390,20 @@ inline int pqAddNewVersion(PGconn* conn, int engine_id, version version_info) {
     strftime(tmtodate, 40, "%Y-%m-%d", &version_info.releaseDate);
     
     const char* code_lang_literals[3] = {NULL, "code_lang", "code_lang_name"};
-    int code_link_id = pqGetElementId(conn, version_info.programLang, code_lang_literals);
+    int code_link_id = pqGetElementId(conn, version_info.programLang, code_lang_literals, 0);
+    if (code_link_id != -1) {
+        fprintf(stderr, "%s was not in the table and is not automatically inserted.\n", version_info.programLang);
+        return -1;
+    }
     char code_link_id_str[25];
     snprintf(code_link_id_str, 25, "%d", code_link_id);
     
     const char* license_literals[3] = {NULL, "license", "license_name"};
-    int license_id = pqGetElementId(conn, version_info.license, license_literals);
+    int license_id = pqGetElementId(conn, version_info.license, license_literals, 0);
+    if (code_link_id != -1) {
+        fprintf(stderr, "%s was not in the table and is not automatically inserted.\n", version_info.license);
+        return -1;
+    }
     char license_id_str[25];
     snprintf(license_id_str, 25, "%d", license_id);
     

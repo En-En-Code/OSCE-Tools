@@ -133,10 +133,8 @@ inline void pqListEnginesWithName(PGconn* conn, char* engine_name) {
     PQclear(res);
 }
 
-inline void pqListAuthors(PGconn* conn, int engine_id) {
-    char itoc_str[25];
-    snprintf(itoc_str, 25, "%d", engine_id);
-    const char* paramValues[1] = { itoc_str };
+inline void pqListAuthors(PGconn* conn, char* engine_id) {
+    const char* paramValues[1] = { engine_id };
     
     PGresult* res;
     res = PQexecParams(conn,
@@ -153,10 +151,8 @@ inline void pqListAuthors(PGconn* conn, int engine_id) {
     PQclear(res);
 }
 
-inline void pqListSources(PGconn* conn, int engine_id) {
-    char itoc_str[25];
-    snprintf(itoc_str, 25, "%d", engine_id);
-    const char* paramValues[1] = { itoc_str };
+inline void pqListSources(PGconn* conn, char* engine_id) {
+    const char* paramValues[1] = { engine_id };
     
     PGresult* res;
     res = PQexecParams(conn,
@@ -173,15 +169,13 @@ inline void pqListSources(PGconn* conn, int engine_id) {
     PQclear(res);
 }
 
-inline void pqListVersions(PGconn* conn, int engine_id) {
+inline void pqListVersions(PGconn* conn, char* engine_id) {
     /*
     Note that it is neither necessary nor correct to do escaping when
     a data value is passed as a separate parameter in PQexecParams.
         -- https://www.postgresql.org/docs/15/libpq-exec.html#LIBPQ-EXEC-ESCAPE-STRING
     */
-    char itoc_str[25];
-    snprintf(itoc_str, 25, "%d", engine_id);
-    const char* paramValues[1] = { itoc_str };
+    const char* paramValues[1] = { engine_id };
 
     PGresult* res;
     /*
@@ -208,8 +202,8 @@ inline void pqListVersions(PGconn* conn, int engine_id) {
     PQclear(res);
 }
 
-// Returns the engine_id of the engine just inserted on success, -1 on failure.
-inline int pqAddNewEngine(PGconn* conn, char* engine_name, char* note) {
+// Returns the engine_id of the engine just inserted on success, NULL on failure.
+inline char* pqAddNewEngine(PGconn* conn, char* engine_name, char* note) {
     const char* paramValues[2] = { engine_name, note };
     
     PGresult* res;
@@ -220,9 +214,9 @@ inline int pqAddNewEngine(PGconn* conn, char* engine_name, char* note) {
     if (PQresultStatus(res) != PGRES_TUPLES_OK) {
         fprintf(stderr, "INSERT failed: %s", PQerrorMessage(conn));
         PQclear(res);
-        return -1;
+        return NULL;
     }
-    int ret = atoi(PQgetvalue(res, 0, 0));
+    char* ret = errhandStrdup(PQgetvalue(res, 0, 0));
     PQclear(res);
     
     return ret;
@@ -232,9 +226,7 @@ inline int pqAddNewEngine(PGconn* conn, char* engine_name, char* note) {
 // literals[0] contains the name of the relational table (e.g. engine_authorship, source_reference)
 // literals[1] contains the name of the id table (e.g. author, source)
 // literals[2] contains the name of the value in the id table (e.g. author_name, source_uri)
-inline int pqAddNewNDSeries(PGconn* conn, int engine_id, char* nd_series, const char** literals) {
-    char itoc_str[25];
-    snprintf(itoc_str, 25, "%d", engine_id);
+inline int pqAddNewNDSeries(PGconn* conn, char* engine_id, char* nd_series, const char** literals) {
     int rows = 0;
     
     int start_loc = 0;
@@ -245,7 +237,7 @@ inline int pqAddNewNDSeries(PGconn* conn, int engine_id, char* nd_series, const 
         if (element_id == -1) {
             return -1;
         }
-        if (pqAddRelation(conn, itoc_str, element_id, literals) == -1) {
+        if (pqAddRelation(conn, engine_id, element_id, literals) == -1) {
             return -1;
         }
         rows += 1;
@@ -310,10 +302,10 @@ inline int pqGetElementId(PGconn* conn, char* element, const char** literals, in
 // literals[0] contains the name of the relational table (e.g. engine_authorship, source_reference)
 // literals[1] contains the name of the inserted object (e.g. author, source)
 // literals[2] contains the name of the value in the id table (e.g. author_name, source_uri)
-inline int pqAddRelation(PGconn* conn, char* itoc_str, int element_id, const char** literals) {
+inline int pqAddRelation(PGconn* conn, char* engine_id, int element_id, const char** literals) {
     char ndidc_str[25];
     snprintf(ndidc_str, 25, "%d", element_id);
-    const char* paramValues[2] = { itoc_str, ndidc_str };
+    const char* paramValues[2] = { engine_id, ndidc_str };
     char query_maker[256];
     snprintf(query_maker, 256, "INSERT INTO %s (engine_id, %s_id) VALUES ($1, $2);",
                 literals[0], literals[1]);
@@ -331,16 +323,14 @@ inline int pqAddRelation(PGconn* conn, char* itoc_str, int element_id, const cha
     return 0;
 }
 
-inline int pqAddNewNDAuthors(PGconn* conn, int engine_id, char* authors) {
+inline int pqAddNewNDAuthors(PGconn* conn, char* engine_id, char* authors) {
     const char* literals[3] = { "engine_authorship", "author", "author_name" };
     return pqAddNewNDSeries(conn, engine_id, authors, literals);
 }
 
 // Add a new source link if it does not exist, or retrieve its ID if it does.
 // Then, add a relation between in source_reference behind an engine and the source.
-inline int pqAddNewSource(PGconn* conn, int engine_id, code_link source) {
-    char itoc_str[25];
-    snprintf(itoc_str, 25, "%d", engine_id);
+inline int pqAddNewSource(PGconn* conn, char* engine_id, code_link source) {
     const char* vcsParamValues[1] = { source.vcs };
     
     PGresult* res_vcs;
@@ -374,7 +364,7 @@ inline int pqAddNewSource(PGconn* conn, int engine_id, code_link source) {
     int source_id = atoi(PQgetvalue(res_source, 0, 0));
     
     const char* literals[2] = { "source_reference", "source" };
-    int ret = pqAddRelation(conn, itoc_str, source_id, literals);
+    int ret = pqAddRelation(conn, engine_id, source_id, literals);
     
     PQclear(res_vcs);
     PQclear(res_source);
@@ -382,16 +372,14 @@ inline int pqAddNewSource(PGconn* conn, int engine_id, code_link source) {
     return ret;
 }
 
-inline int pqAddNewVersion(PGconn* conn, int engine_id, version version_info) {
-    char itoc_str[25];
-    snprintf(itoc_str, 25, "%d", engine_id);
+inline int pqAddNewVersion(PGconn* conn, char* engine_id, version version_info) {
     // Year-MM-DD, the most sane format
     char tmtodate[40];
     strftime(tmtodate, 40, "%Y-%m-%d", &version_info.releaseDate);
     
     const char* code_lang_literals[3] = {NULL, "code_lang", "code_lang_name"};
     int code_link_id = pqGetElementId(conn, version_info.programLang, code_lang_literals, 0);
-    if (code_link_id != -1) {
+    if (code_link_id == -1) {
         fprintf(stderr, "%s was not in the table and is not automatically inserted.\n", version_info.programLang);
         return -1;
     }
@@ -400,7 +388,7 @@ inline int pqAddNewVersion(PGconn* conn, int engine_id, version version_info) {
     
     const char* license_literals[3] = {NULL, "license", "license_name"};
     int license_id = pqGetElementId(conn, version_info.license, license_literals, 0);
-    if (code_link_id != -1) {
+    if (code_link_id == -1) {
         fprintf(stderr, "%s was not in the table and is not automatically inserted.\n", version_info.license);
         return -1;
     }
@@ -408,7 +396,7 @@ inline int pqAddNewVersion(PGconn* conn, int engine_id, version version_info) {
     snprintf(license_id_str, 25, "%d", license_id);
     
     const char* paramValues[8] = {
-        itoc_str,
+        engine_id,
         version_info.versionNum,
         tmtodate,
         code_link_id_str,

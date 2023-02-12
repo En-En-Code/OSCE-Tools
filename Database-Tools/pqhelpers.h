@@ -23,17 +23,18 @@ extern void pqListEngines(PGconn* conn);
 extern int* pqAllocEngineIdsWithName(PGconn* conn, char* engine_name);
 extern void pqListEnginesWithName(PGconn* conn, char* engine_name);
 
-extern void pqListAuthors(PGconn* conn, int engine_id);
-extern void pqListSources(PGconn* conn, int engine_id);
-extern void pqListVersions(PGconn* conn, int engine_id);
+extern void pqListAuthors(PGconn* conn, char* engine_id);
+extern void pqListSources(PGconn* conn, char* engine_id);
+extern void pqListVersions(PGconn* conn, char* engine_id);
 
-extern int  pqAddNewEngine(PGconn* conn, char* engine_name, char* note);
-extern int  pqAddNewNDSeries(PGconn* conn, int engine_id, char* nd_series, const char** literals);
+extern char*    pqAddNewEngine(PGconn* conn, char* engine_name, char* note);
+
+extern int  pqAddNewNDSeries(PGconn* conn, char* engine_id, char* nd_series, const char** literals);
 
 extern int  pqGetElementId(PGconn* conn, char* element, const char** literals, int insert_on_fail);
-extern int  pqAddRelation(PGconn* conn, char* itoc_str, int element_id, const char** literals);
+extern int  pqAddRelation(PGconn* conn, char* engine_id, int element_id, const char** literals);
 
-extern int  pqAddNewNDAuthors(PGconn* conn, int engine_id, char* authors);
+extern int  pqAddNewNDAuthors(PGconn* conn, char* engine_id, char* authors);
 
-extern int  pqAddNewSource(PGconn* conn, int engine_id, code_link source);
-extern int  pqAddNewVersion(PGconn* conn, int engine_id, version version_info);
+extern int  pqAddNewSource(PGconn* conn, char* engine_id, code_link source);
+extern int  pqAddNewVersion(PGconn* conn, char* engine_id, version version_info);

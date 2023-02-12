@@ -42,11 +42,12 @@ inline void cliRootLoop(PGconn* conn) {
                 engine_name = cliAllocInputString("Name of engine", 256);
                 printf("Note(s) for every version of %s: ", engine_name);
                 input[cliReadInput(input, 4096)] = '\0';
-                engine_id = pqAddNewEngine(conn, engine_name, strlen(input)?input:NULL);
-                if (engine_id != -1) {
-                    cliEngineLoop(conn, engine_name, engine_id);
+                char* engine_id_str = pqAddNewEngine(conn, engine_name, strlen(input)?input:NULL);
+                if (engine_id_str != NULL) {
+                    cliEngineLoop(conn, engine_name, engine_id_str);
                 }
                 free(engine_name);
+                free(engine_id_str);
                 break;
             case 'S':
                 engine_name = strchr(input, ' ');
@@ -57,7 +58,9 @@ inline void cliRootLoop(PGconn* conn) {
                 engine_name += 1; // Move to the index after the space.
                 engine_id = cliObtainIdFromName(conn, engine_name);
                 if (engine_id != -1) {
-                    cliEngineLoop(conn, engine_name, engine_id);
+                    char engine_id_str[25];
+                    snprintf(engine_id_str, 25, "%d", engine_id);
+                    cliEngineLoop(conn, engine_name, engine_id_str);
                 }
                 break;
             case 'Q':
@@ -67,10 +70,11 @@ inline void cliRootLoop(PGconn* conn) {
                 fprintf(stderr, "Command %c not expected.\n\n", input[0]);
         }
     }
+    
     free(input);
 }
 
-inline void cliEngineLoop(PGconn* conn, char* engine_name, int engine_id) {
+inline void cliEngineLoop(PGconn* conn, char* engine_name, char* engine_id) {
     char* input = (char*)errhandMalloc(4096);
     input[0] = '\0';
     

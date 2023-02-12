@@ -16,6 +16,7 @@ limitations under the License.
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "globals.h"
 
 // Memory is allocated by this function to store ptr.
@@ -40,6 +41,18 @@ inline void* errhandRealloc(void* ptr, size_t size) {
         exit(1);
     }
     return new_ptr;
+}
+
+// Memory is allocated by this function to store new_s
+// Free must be called when finished with the returned value.
+inline char* errhandStrdup(const char* s) {
+    char* new_s = strdup(s);
+    if (new_s == NULL) {
+        fprintf(stderr, "not enough memory to perform allocation.\n");
+        free(new_s);
+        exit(1);
+    }
+    return new_s;
 }
 
 // Frees a version struct created with previous calls to malloc on each char* element

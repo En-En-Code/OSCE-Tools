@@ -17,7 +17,7 @@ limitations under the License.
 #include "globals.h"
 
 extern void cliRootLoop(PGconn* conn);
-extern void cliEngineLoop(PGconn* conn, char* engine_name, int engine_id);
+extern void cliEngineLoop(PGconn* conn, char* engine_name, char* engine_id);
 extern void cliListRootCommands();
 extern void cliListEngineCommands(char* engine_name);
 extern int  cliReadInput(char* s, int size);

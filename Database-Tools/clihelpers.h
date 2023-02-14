@@ -20,8 +20,8 @@ extern void cliRootLoop(PGconn* conn);
 extern void cliEngineLoop(PGconn* conn, char* engine_name, char* engine_id);
 extern void cliListRootCommands();
 extern void cliListEngineCommands(char* engine_name);
-extern int  cliReadInput(char* s, int size);
 
+extern size_t   cliReadInput(char* s, int size);
 extern char*    cliAllocInputString(char* explan, size_t size);
 extern char*    cliAllocNDSeries(char* name, size_t size);
 extern int      cliObtainIdFromName(PGconn* conn, char* engine_name);

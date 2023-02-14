@@ -31,7 +31,7 @@ inline void cliRootLoop(PGconn* conn) {
     
     while (input[0] != 'Q') {
         cliListRootCommands();
-        input[cliReadInput(input, 4096)] = '\0';
+        cliReadInput(input, 4096);
         input[0] = toupper(input[0]);
         
         switch (input[0]) {
@@ -41,7 +41,7 @@ inline void cliRootLoop(PGconn* conn) {
             case 'N':
                 engine_name = cliAllocInputString("Name of engine", 256);
                 printf("Note(s) for every version of %s: ", engine_name);
-                input[cliReadInput(input, 4096)] = '\0';
+                cliReadInput(input, 4096);
                 char* engine_id_str = pqAddNewEngine(conn, engine_name, strlen(input)?input:NULL);
                 if (engine_id_str != NULL) {
                     cliEngineLoop(conn, engine_name, engine_id_str);
@@ -80,7 +80,7 @@ inline void cliEngineLoop(PGconn* conn, char* engine_name, char* engine_id) {
     
     while (input[0] != 'X') {
         cliListEngineCommands(engine_name);
-        input[cliReadInput(input, 4096)] = '\0';
+        cliReadInput(input, 4096);
         input[0] = toupper(input[0]);
         
         switch (input[0]) {
@@ -134,12 +134,22 @@ inline void cliListEngineCommands(char* engine_name) {
 
 // An fgets-stdin wrapper which handles possible fgets errors.
 // Returns the number of bytes before a newline read, which is far more useful than s.
-inline int cliReadInput(char* s, int size) {
+inline size_t cliReadInput(char* s, int size) {
     if (fgets(s, size, stdin) == NULL) {
         fprintf(stderr, "fgets returned a NULLPTR.\n");
         exit(1);
     }
-    return strcspn(s, "\n");
+    size_t length = strlen(s);
+    if (length > 0) {
+        if (s[length-1] != '\n') {
+            int c;
+            while ((c = getchar()) != '\n' && c != EOF);
+        } else {
+            s[length-1] = '\0';
+            length -= 1;
+        }
+    }
+    return length;
 }
 
 // Memory is allocated by this function to store the input.
@@ -150,9 +160,9 @@ inline char* cliAllocInputString(char* explan, size_t size) {
 
     do {
         printf("%s (cannot be empty): ", explan);
-        input[cliReadInput(input, size)] = '\0';
-	} while (input[0] == '\0');
-	
+        cliReadInput(input, size);
+    } while (input[0] == '\0');
+    
     return input;
 }
 
@@ -161,15 +171,16 @@ inline char* cliAllocInputString(char* explan, size_t size) {
 // The format is a string of values, each value separated by a newline.
 inline char* cliAllocNDSeries(char* name, size_t size) {
     char* nd_strings = NULL;
-    int total_bytes = 0;
+    size_t total_bytes = 0;
 
     while (total_bytes == 0) {
-        int bytes_written = 0;
+        size_t bytes_written = 0;
 
         do {
             nd_strings = (char*)errhandRealloc(nd_strings, total_bytes + size);
             printf("Enter one %s (Leave empty to finish adding %ss): ", name, name);
             bytes_written = cliReadInput(nd_strings + total_bytes, size);
+            nd_strings[total_bytes + bytes_written] = '\n';
             total_bytes += bytes_written + 1; //jump over the newline/stray terminator
         } while (bytes_written > 0);
 
@@ -193,7 +204,7 @@ inline char* cliAllocNDSeries(char* name, size_t size) {
         }
     }
     
-	return nd_strings;
+    return nd_strings;
 }
 
 // A helper function, which determines the ID of an engine based on its name.
@@ -218,7 +229,7 @@ inline int cliObtainIdFromName(PGconn* conn, char* engine_name) {
             printf("Multiple engines of the name %s found.\n", engine_name);
             pqListEnginesWithName(conn, engine_name);
             printf("Select an engine ID from the list to disambiguate: ");
-            input[cliReadInput(input, 4096)] = '\0';
+            cliReadInput(input, 4096);
             engine_id = atoi(input);
             for (int i = 0; i < *engine_id_list; i += 1) {
                 if (engine_id == *(engine_id_list + 1 + i)) {
@@ -301,7 +312,7 @@ inline version cliAllocVersion() {
     version_data.license = cliAllocInputString("License", 64);
 
     printf("Other notes about this version: ");
-    buff[cliReadInput(buff, 4096)] = '\0';
+    cliReadInput(buff, 4096);
     version_data.note = buff;
 
     return version_data;

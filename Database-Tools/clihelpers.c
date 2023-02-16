@@ -21,6 +21,7 @@ limitations under the License.
 #include <libpq-fe.h>
 #include "clihelpers.h"
 #include "pqhelpers.h"
+#include "vcshelpers.h"
 #include "globals.h"
 
 inline void cliRootLoop(PGconn* conn) {
@@ -62,6 +63,9 @@ inline void cliRootLoop(PGconn* conn) {
                     snprintf(engine_id_str, 25, "%d", engine_id);
                     cliEngineLoop(conn, engine_name, engine_id_str);
                 }
+                break;
+            case 'U':
+                vcsUpdateScan(conn);
                 break;
             case 'Q':
                 // Intentional no error, since 'Q' quits loop.
@@ -120,6 +124,7 @@ inline void cliListRootCommands() {
     printf("E (List all engines)\n");
     printf("N (Create new engine)\n");
     printf("S [NAME] (Select existing engine)\n");
+    printf("U (Check engines for updates)\n");
     printf("Q (Quit)\n");
 }
 

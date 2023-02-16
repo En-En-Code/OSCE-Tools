@@ -202,6 +202,27 @@ inline void pqListVersions(PGconn* conn, char* engine_id) {
     PQclear(res);
 }
 
+inline char* pqAllocLatestVersionDate(PGconn* conn, char* engine_id) {
+    const char* paramValues[1] = { engine_id };
+
+    PGresult* res;
+    res = PQexecParams(conn,
+                        "SELECT release_date FROM version v JOIN engine USING (engine_id) "
+                        "JOIN license USING (license_id) "
+                        "JOIN code_lang USING (code_lang_id) WHERE v.engine_id = $1 "
+                        "ORDER BY release_date DESC LIMIT 1;",
+                        1, NULL, paramValues, NULL, NULL, 0);
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+        fprintf(stderr, "SELECT failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        return NULL;
+    }
+    char* ret = errhandStrdup(PQgetvalue(res, 0, 0));
+    PQclear(res);
+
+    return ret;
+}
+
 // Returns the engine_id of the engine just inserted on success, NULL on failure.
 inline char* pqAddNewEngine(PGconn* conn, char* engine_name, char* note) {
     const char* paramValues[2] = { engine_name, note };
@@ -419,4 +440,14 @@ inline int pqAddNewVersion(PGconn* conn, char* engine_id, version version_info) 
     }
     PQclear(res);
     return 0;
+}
+
+// Note: The caller is responsible for checking the query was successful and for freeing res.
+inline PGresult* pqAllocAllSources(PGconn* conn) {
+    PGresult* res;
+    res = PQexec(conn,
+                "SELECT engine_name, engine_id, source_uri, vcs_name FROM source s "
+                "JOIN vcs USING (vcs_id) JOIN source_reference USING (source_id) JOIN engine USING (engine_id) "
+                "ORDER BY s.vcs_id DESC;");
+    return res;
 }

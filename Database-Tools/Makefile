@@ -19,18 +19,17 @@ SRC_FILES := $(wildcard *.c)
 OBJ_FILES := $(patsubst %.c,%.o,$(SRC_FILES))
 
 CFLAGS := $(CFLAGS)
+CFLAGS += $(shell pkg-config --cflags libgit2 libpq)
 CFLAGS += -Wall
-CPPFLAGS := $(CPPFLAGS)
-CPPFLAGS += $(foreach dir,$(shell pg_config --includedir),-I$(dir))
-LIBFLAGS := $(foreach dir,$(shell pg_config --libdir),-L$(dir)) -lpq
+LIBFLAGS = $(shell pkg-config --libs libgit2 libpq)
 
 all: $(EXEC)
 
 $(EXEC): $(OBJ_FILES)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -o $@ $(LIBFLAGS)
+	$(CC) $(CFLAGS) $^ -o $@ $(LIBFLAGS)
 
 %.o: %.c
-	$(CC) -c $(CPPFLAGS) $(CFLAGS) $< -o $@ $(LIBFLAGS)
+	$(CC) -c $(CFLAGS) $< -o $@
 
 clean:
 	rm -f *.o $(EXEC)

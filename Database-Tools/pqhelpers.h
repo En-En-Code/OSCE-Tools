@@ -23,9 +23,10 @@ extern void pqListEngines(PGconn* conn);
 extern int* pqAllocEngineIdsWithName(PGconn* conn, char* engine_name);
 extern void pqListEnginesWithName(PGconn* conn, char* engine_name);
 
-extern void pqListAuthors(PGconn* conn, char* engine_id);
-extern void pqListSources(PGconn* conn, char* engine_id);
-extern void pqListVersions(PGconn* conn, char* engine_id);
+extern void     pqListAuthors(PGconn* conn, char* engine_id);
+extern void     pqListSources(PGconn* conn, char* engine_id);
+extern void     pqListVersions(PGconn* conn, char* engine_id);
+extern char*    pqAllocLatestVersionDate(PGconn* conn, char* engine_id);
 
 extern char*    pqAddNewEngine(PGconn* conn, char* engine_name, char* note);
 
@@ -38,3 +39,5 @@ extern int  pqAddNewNDAuthors(PGconn* conn, char* engine_id, char* authors);
 
 extern int  pqAddNewSource(PGconn* conn, char* engine_id, code_link source);
 extern int  pqAddNewVersion(PGconn* conn, char* engine_id, version version_info);
+
+extern PGresult*  pqAllocAllSources(PGconn* conn);

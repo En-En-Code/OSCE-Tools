@@ -14,9 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+#define _XOPEN_SOURCE 500
+#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ftw.h>
 #include "globals.h"
 
 // Memory is allocated by this function to store ptr.
@@ -66,4 +69,19 @@ inline void freeVersion(version v) {
 inline void freeCodeLink(code_link cl) {
     free(cl.uri);
     free(cl.vcs);
+}
+
+// A pair of helper functions based on https://stackoverflow.com/a/5467788
+// Deletes a directory and its contents recursively.
+inline int rm_file(const char* fpath, const struct stat* sb, int typeflag, struct FTW* ftwbuf) {
+    int rv = remove(fpath);
+
+    if (rv)
+        perror(fpath);
+
+    return rv;
+}
+
+inline int rm_file_recursive(char* path) {
+    return nftw(path, rm_file, 64, FTW_DEPTH | FTW_PHYS);
 }

@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+#include <unistd.h>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
@@ -74,11 +75,16 @@ inline int vcsUpdateScan(PGconn* conn) {
     return updateCount;
 }
 
-// Returns 1 if the repo has an update, 0 if the repo doesn't have an update, negative numbers for errors.
+// Returns time of last commit, or negative numbers for errors.
 inline time_t vcsUpdateScanGit(char* uri) {
     git_repository* repo = NULL;
     const char* url = uri;
-    const char* path = "./temp";
+    char path[4096];
+    if (getcwd(path, 4090) == NULL) {
+        fprintf(stderr, "Absolute filepath too long.\n");
+        return -1;
+    }
+    strcat(path, "/temp");
 
     git_clone_options clone_opts = GIT_CLONE_OPTIONS_INIT;
     clone_opts.checkout_opts.checkout_strategy = GIT_CHECKOUT_NONE;
@@ -108,8 +114,8 @@ inline time_t vcsUpdateScanGit(char* uri) {
     time_t commit_time = git_commit_time(latest_commit);
 
     git_commit_free(latest_commit);
-    //git_reference_free(oid);
     git_repository_free(repo);
+    rm_file_recursive(path);
 
     return commit_time;
 }

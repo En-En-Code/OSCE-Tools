@@ -37,7 +37,10 @@ extern void* errhandMalloc(size_t size);
 extern void* errhandRealloc(void* ptr, size_t size);
 extern char* errhandStrdup(const char* s);
 
-extern void  freeVersion(version v);
-extern void  freeCodeLink(code_link cl);
+extern void freeVersion(version v);
+extern void freeCodeLink(code_link cl);
+
+extern int  rm_file(const char* fpath, const struct stat* sb, int typeflag, struct FTW* ftwbuf);
+extern int  rm_file_recursive(char* fpath);
 
 #endif

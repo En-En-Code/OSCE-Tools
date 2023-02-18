@@ -201,13 +201,14 @@ CREATE SEQUENCE version_id_seq AS int;
 CREATE TABLE version (
     version_id      int PRIMARY KEY DEFAULT nextval('version_id_seq'),
     engine_id       int REFERENCES engine (engine_id),
-    version_num     varchar(255) NOT NULL,  -- The version number, e.g. 1.0, TCEC_v2, origin/HEAD.
+    version_name    varchar(255) NOT NULL,  -- The version number, e.g. 1.0, TCEC_v2, origin/HEAD.
     release_date    date NOT NULL,          -- Release date/date of last commit (for origin/HEAD).
     code_lang_id    int REFERENCES code_lang (code_lang_id),
     license_id      int REFERENCES license (license_id),
     accepts_xboard  bool NOT NULL,          -- Can the program interface with Xboard?
     accepts_uci     bool NOT NULL,          -- Can the program interface with UCI?
-    note            text                    -- Custom documentation/notes.
+    note            text,                   -- Custom documentation/notes.
+    UNIQUE (engine_id, version_name)
 );
 ALTER SEQUENCE version_id_seq OWNED BY version.version_id;
 

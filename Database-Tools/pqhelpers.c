@@ -187,7 +187,7 @@ inline void pqListVersions(PGconn* conn, char* engine_id) {
         -- https://www.crunchydata.com/blog/preventing-sql-injection-attacks-in-postgresql
     */
     res = PQexecParams(conn,
-                        "SELECT version_num, release_date, code_lang_name, "
+                        "SELECT version_name, release_date, code_lang_name, "
                         "license_name, accepts_xboard, accepts_uci, v.note "
                         "FROM version v JOIN engine USING (engine_id) JOIN license USING (license_id) "
                         "JOIN code_lang USING (code_lang_id) WHERE v.engine_id = $1;",
@@ -429,7 +429,7 @@ inline int pqAddNewVersion(PGconn* conn, char* engine_id, version version_info) 
     
     PGresult* res;
     res = PQexecParams(conn,
-                        "INSERT INTO version (engine_id, version_num, release_date, "
+                        "INSERT INTO version (engine_id, version_name, release_date, "
                         "code_lang_id, license_id, accepts_xboard, accepts_uci, note) "
                         "VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
                         8, NULL, paramValues, NULL, NULL, 0);
@@ -440,6 +440,16 @@ inline int pqAddNewVersion(PGconn* conn, char* engine_id, version version_info) 
     }
     PQclear(res);
     return 0;
+}
+
+inline int pqAddNewInspiration(PGconn* conn, char* engine_id, int parent_engine_id) {
+    const char* literals[2] = { "inspiration", "parent_engine" };
+    return pqAddRelation(conn, engine_id, parent_engine_id, literals);
+}
+
+inline int pqAddNewPredecessor(PGconn* conn, char* engine_id, int parent_engine_id) {
+    const char* literals[2] = { "predecessor", "parent_engine" };
+    return pqAddRelation(conn, engine_id, parent_engine_id, literals);
 }
 
 // Note: The caller is responsible for checking the query was successful and for freeing res.

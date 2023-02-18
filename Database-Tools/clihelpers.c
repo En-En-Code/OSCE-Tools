@@ -27,7 +27,7 @@ limitations under the License.
 inline void cliRootLoop(PGconn* conn) {
     char* input = (char*)errhandMalloc(4096);
     input[0] = '\0';
-    char* engine_name;
+    char* engine_name = NULL;
     int engine_id;
     
     while (input[0] != 'Q') {
@@ -53,7 +53,7 @@ inline void cliRootLoop(PGconn* conn) {
             case 'S':
                 engine_name = strchr(input, ' ');
                 if (engine_name == NULL) {
-                    fprintf(stderr, "Name of engine exepcted.\n\n");
+                    fprintf(stderr, "Name of engine exepcted.\n");
                     break;
                 }
                 engine_name += 1; // Move to the index after the space.
@@ -71,8 +71,9 @@ inline void cliRootLoop(PGconn* conn) {
                 // Intentional no error, since 'Q' quits loop.
                 break;
             default:
-                fprintf(stderr, "Command %c not expected.\n\n", input[0]);
+                fprintf(stderr, "Command %c not expected.\n", input[0]);
         }
+        printf("\n");
     }
     
     free(input);
@@ -81,7 +82,9 @@ inline void cliRootLoop(PGconn* conn) {
 inline void cliEngineLoop(PGconn* conn, char* engine_name, char* engine_id) {
     char* input = (char*)errhandMalloc(4096);
     input[0] = '\0';
-    
+    char* parent_engine_name = NULL;
+    int parent_engine_id;
+
     while (input[0] != 'X') {
         cliListEngineCommands(engine_name);
         cliReadInput(input, 4096);
@@ -108,13 +111,38 @@ inline void cliEngineLoop(PGconn* conn, char* engine_name, char* engine_id) {
                 pqAddNewVersion(conn, engine_id, version_info);
                 freeVersion(version_info);
                 break;
+            case 'I':
+                parent_engine_name = strchr(input, ' ');
+                if (parent_engine_name == NULL) {
+                    fprintf(stderr, "Name of engine exepcted.\n");
+                    break;
+                }
+                parent_engine_name += 1; // Move to the index after the space.
+                parent_engine_id = cliObtainIdFromName(conn, parent_engine_name);
+                if (parent_engine_id != -1) {
+                    pqAddNewInspiration(conn, engine_id, parent_engine_id);
+                }
+                break;
+            case 'D':
+                parent_engine_name = strchr(input, ' ');
+                if (parent_engine_name == NULL) {
+                    fprintf(stderr, "Name of engine exepcted.\n");
+                    break;
+                }
+                parent_engine_name += 1; // Move to the index after the space.
+                parent_engine_id = cliObtainIdFromName(conn, parent_engine_name);
+                if (parent_engine_id != -1) {
+                    pqAddNewPredecessor(conn, engine_id, parent_engine_id);
+                }
+                break;
             case 'X':
                 //Intentional no error, since 'X' quits loop.
                 printf("\n");
                 break;
             default:
-                fprintf(stderr, "Command %c not expected.\n\n", input[0]);
+                fprintf(stderr, "Command %c not expected.\n", input[0]);
         }
+        printf("\n");
     }
     free(input);
 }
@@ -134,6 +162,8 @@ inline void cliListEngineCommands(char* engine_name) {
     printf("A (Add new authors to %s)\n", engine_name);
     printf("S (Add new source code URI to %s)\n", engine_name);
     printf("V (Add new version of %s)\n", engine_name);
+    printf("I [NAME] (Add engine %s took inspiration from)\n", engine_name);
+    printf("D [NAME] (Add engine %s is derived from)\n", engine_name);
     printf("X (Exit to the root menu)\n");
 }
 

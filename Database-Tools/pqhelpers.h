@@ -39,5 +39,7 @@ extern int  pqAddNewNDAuthors(PGconn* conn, char* engine_id, char* authors);
 
 extern int  pqAddNewSource(PGconn* conn, char* engine_id, code_link source);
 extern int  pqAddNewVersion(PGconn* conn, char* engine_id, version version_info);
+extern int  pqAddNewInspiration(PGconn* conn, char* engine_id, int parent_engine_id);
+extern int  pqAddNewDerivative(PGconn* conn, char* engine_id, int parent_engine_id);
 
 extern PGresult*  pqAllocAllSources(PGconn* conn);

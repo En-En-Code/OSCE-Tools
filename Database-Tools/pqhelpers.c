@@ -93,8 +93,7 @@ inline int* pqAllocEngineIdsWithName(PGconn* conn, char* engine_name) {
     PGresult* res;
     
     res = PQexecParams(conn,
-        "SELECT engine_id, engine_name, note FROM engine "
-        "WHERE engine_name = $1;",
+        "SELECT engine_id FROM engine WHERE engine_name = $1;",
         1, NULL, paramValues, NULL, NULL, 0);
     if (PQresultStatus(res) != PGRES_TUPLES_OK) {
         fprintf(stderr, "SELECT failed: %s", PQerrorMessage(conn));
@@ -111,6 +110,28 @@ inline int* pqAllocEngineIdsWithName(PGconn* conn, char* engine_name) {
     PQclear(res);
     
     return results;
+}
+
+// This function allocates a char* on success, which needs to be freed when done.
+inline char* pqAllocVersionIdWithName(PGconn* conn, char* engine_id, char* version_name) {
+    const char* paramValues[2] = { engine_id, version_name };
+    PGresult* res;
+
+    res = PQexecParams(conn,
+                        "SELECT version_id FROM version "
+                        "WHERE engine_id = $1 AND version_name = $2;",
+                        2, NULL, paramValues, NULL, NULL, 0);
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+        fprintf(stderr, "SELECT failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        return NULL;
+    }
+    if (PQntuples(res)) {
+        char* ret = errhandStrdup(PQgetvalue(res, 0, 0));
+        PQclear(res);
+        return ret;
+    }
+    return NULL;
 }
 
 inline void pqListEnginesWithName(PGconn* conn, char* engine_name) {
@@ -450,6 +471,54 @@ inline int pqAddNewInspiration(PGconn* conn, char* engine_id, int parent_engine_
 inline int pqAddNewPredecessor(PGconn* conn, char* engine_id, int parent_engine_id) {
     const char* literals[2] = { "predecessor", "parent_engine" };
     return pqAddRelation(conn, engine_id, parent_engine_id, literals);
+}
+
+inline int pqAddNewVersionOs(PGconn* conn, char* version_id, char* os_name) {
+    const char* os_literals[3] = {NULL, "os", "os_name"};
+    int os_id = pqGetElementId(conn, os_name, os_literals, 0);
+    if (os_id == -1) {
+        fprintf(stderr, "%s was not in the table and is not automatically inserted.\n", os_name);
+        return -1;
+    }
+    char os_id_str[25];
+    snprintf(os_id_str, 25, "%d", os_id);
+
+    const char* paramValues[2] = {version_id, os_id_str};
+    PGresult* res;
+    res = PQexecParams(conn,
+                        "INSERT INTO compatible_os (version_id, os_id) VALUES ($1, $2);",
+                        2, NULL, paramValues, NULL, NULL, 0);
+    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
+        fprintf(stderr, "INSERT failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        return -1;
+    }
+    PQclear(res);
+    return 0;
+}
+
+inline int pqAddNewVersionEgtb(PGconn* conn, char* version_id, char* egtb_name) {
+    const char* egtb_literals[3] = {NULL, "egtb", "egtb_name"};
+    int egtb_id = pqGetElementId(conn, egtb_name, egtb_literals, 0);
+    if (egtb_id == -1) {
+        fprintf(stderr, "%s was not in the table and is not automatically inserted.\n", egtb_name);
+        return -1;
+    }
+    char egtb_id_str[25];
+    snprintf(egtb_id_str, 25, "%d", egtb_id);
+
+    const char* paramValues[2] = {version_id, egtb_id_str};
+    PGresult* res;
+    res = PQexecParams(conn,
+                        "INSERT INTO compatible_egtb (version_id, egtb_id) VALUES ($1, $2);",
+                        2, NULL, paramValues, NULL, NULL, 0);
+    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
+        fprintf(stderr, "INSERT failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        return -1;
+    }
+    PQclear(res);
+    return 0;
 }
 
 // Note: The caller is responsible for checking the query was successful and for freeing res.

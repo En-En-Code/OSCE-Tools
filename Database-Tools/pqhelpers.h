@@ -17,11 +17,13 @@ limitations under the License.
 #include "globals.h"
 
 extern PGconn* pqInitConnection(const char* conninfo);
+
 extern void pqPrintTable(PGresult* res);
 
-extern void pqListEngines(PGconn* conn);
-extern int* pqAllocEngineIdsWithName(PGconn* conn, char* engine_name);
-extern void pqListEnginesWithName(PGconn* conn, char* engine_name);
+extern void     pqListEngines(PGconn* conn);
+extern int*     pqAllocEngineIdsWithName(PGconn* conn, char* engine_name);
+extern char*    pqAllocVersionIdWithName(PGconn* conn, char* engine_id, char* version_name);
+extern void     pqListEnginesWithName(PGconn* conn, char* engine_name);
 
 extern void     pqListAuthors(PGconn* conn, char* engine_id);
 extern void     pqListSources(PGconn* conn, char* engine_id);
@@ -40,6 +42,8 @@ extern int  pqAddNewNDAuthors(PGconn* conn, char* engine_id, char* authors);
 extern int  pqAddNewSource(PGconn* conn, char* engine_id, code_link source);
 extern int  pqAddNewVersion(PGconn* conn, char* engine_id, version version_info);
 extern int  pqAddNewInspiration(PGconn* conn, char* engine_id, int parent_engine_id);
-extern int  pqAddNewDerivative(PGconn* conn, char* engine_id, int parent_engine_id);
+extern int  pqAddNewPredecessor(PGconn* conn, char* engine_id, int parent_engine_id);
+extern int  pqAddNewVersionOs(PGconn* conn, char* version_id, char* os_name);
+extern int  pqAddNewVersionEgtb(PGconn* conn, char* version_id, char* egtb_name);
 
 extern PGresult*  pqAllocAllSources(PGconn* conn);

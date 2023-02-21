@@ -57,7 +57,7 @@ inline void cliRootLoop(PGconn* conn) {
                     break;
                 }
                 engine_name += 1; // Move to the index after the space.
-                engine_id = cliObtainIdFromName(conn, engine_name);
+                engine_id = cliObtainEngineIdFromName(conn, engine_name);
                 if (engine_id != -1) {
                     char engine_id_str[25];
                     snprintf(engine_id_str, 25, "%d", engine_id);
@@ -101,7 +101,7 @@ inline void cliEngineLoop(PGconn* conn, char* engine_name, char* engine_id) {
                 pqAddNewNDAuthors(conn, engine_id, author_names);
                 free(author_names);
                 break;
-            case 'S':
+            case 'C':
                 code_link source = cliAllocCodeLink();
                 pqAddNewSource(conn, engine_id, source);
                 freeCodeLink(source);
@@ -118,7 +118,7 @@ inline void cliEngineLoop(PGconn* conn, char* engine_name, char* engine_id) {
                     break;
                 }
                 parent_engine_name += 1; // Move to the index after the space.
-                parent_engine_id = cliObtainIdFromName(conn, parent_engine_name);
+                parent_engine_id = cliObtainEngineIdFromName(conn, parent_engine_name);
                 if (parent_engine_id != -1) {
                     pqAddNewInspiration(conn, engine_id, parent_engine_id);
                 }
@@ -126,18 +126,68 @@ inline void cliEngineLoop(PGconn* conn, char* engine_name, char* engine_id) {
             case 'D':
                 parent_engine_name = strchr(input, ' ');
                 if (parent_engine_name == NULL) {
-                    fprintf(stderr, "Name of engine exepcted.\n");
+                    fprintf(stderr, "Name of engine expected.\n");
                     break;
                 }
                 parent_engine_name += 1; // Move to the index after the space.
-                parent_engine_id = cliObtainIdFromName(conn, parent_engine_name);
+                parent_engine_id = cliObtainEngineIdFromName(conn, parent_engine_name);
                 if (parent_engine_id != -1) {
                     pqAddNewPredecessor(conn, engine_id, parent_engine_id);
                 }
                 break;
+            case 'S':
+                char* version_name = strchr(input, ' ');
+                if (version_name == NULL) {
+                    fprintf(stderr, "Name of version expected.\n");
+                    break;
+                }
+                version_name += 1; // Move to the index after the space.
+                char* version_id = cliObtainVersionIdFromName(conn, engine_id, version_name);
+                if (version_id != NULL) {
+                    cliVersionLoop(conn, engine_name, version_id, version_name);
+                    free(version_id);
+                }
+                break;
             case 'X':
                 //Intentional no error, since 'X' quits loop.
-                printf("\n");
+                break;
+            default:
+                fprintf(stderr, "Command %c not expected.\n", input[0]);
+        }
+        printf("\n");
+    }
+    free(input);
+}
+
+inline void cliVersionLoop(PGconn* conn, char* engine_name, char* version_id, char* version_name) {
+    char* input = (char*)errhandMalloc(4096);
+    input[0] = '\0';
+
+    while (input[0] != 'X') {
+        cliListVersionCommands(engine_name, version_name);
+        cliReadInput(input, 4096);
+        input[0] = toupper(input[0]);
+        switch (input[0]) {
+            case 'O':
+                char* os_name = strchr(input, ' ');
+                if (os_name == NULL) {
+                    fprintf(stderr, "Name of operating system expected.\n");
+                    break;
+                }
+                os_name += 1;
+                pqAddNewVersionOs(conn, version_id, os_name);
+                break;
+            case 'T':
+                char* egtb_name = strchr(input, ' ');
+                if (egtb_name == NULL) {
+                    fprintf(stderr, "Name of endgame tablebase expected.\n");
+                    break;
+                }
+                egtb_name += 1;
+                pqAddNewVersionEgtb(conn, version_id, egtb_name);
+                break;
+            case 'X':
+                //Intentional no error, since 'X' quits loop.
                 break;
             default:
                 fprintf(stderr, "Command %c not expected.\n", input[0]);
@@ -151,7 +201,7 @@ inline void cliListRootCommands() {
     printf("Accepted database commands:\n");
     printf("E (List all engines)\n");
     printf("N (Create new engine)\n");
-    printf("S [NAME] (Select existing engine)\n");
+    printf("S [NAME] (Select existing engine [NAME])\n");
     printf("U (Check engines for updates)\n");
     printf("Q (Quit)\n");
 }
@@ -160,11 +210,19 @@ inline void cliListEngineCommands(char* engine_name) {
     printf("What would you like to do with %s?\n", engine_name);
     printf("P (Print info for %s)\n", engine_name);
     printf("A (Add new authors to %s)\n", engine_name);
-    printf("S (Add new source code URI to %s)\n", engine_name);
+    printf("C (Add new source code URI to %s)\n", engine_name);
     printf("V (Add new version of %s)\n", engine_name);
-    printf("I [NAME] (Add engine %s took inspiration from)\n", engine_name);
-    printf("D [NAME] (Add engine %s is derived from)\n", engine_name);
+    printf("I [NAME] (Add engine [NAME] as an inspiration)\n");
+    printf("D [NAME] (Add engine [NAME] as a predecessor)\n");
+    printf("S [VER] (Select existing version [VER])\n");
     printf("X (Exit to the root menu)\n");
+}
+
+inline void cliListVersionCommands(char* engine_name, char* engine_version) {
+    printf("What would you like to do with %s %s?\n", engine_name, engine_version);
+    printf("O [OS] (Add operating system [OS] compatible with %s %s)\n", engine_name, engine_version);
+    printf("T [EGTB] (Add endgame tablebase [EGTB] compatible with %s %s)\n", engine_name, engine_version);
+    printf("X (Exit to the engine menu)\n");
 }
 
 // An fgets-stdin wrapper which handles possible fgets errors.
@@ -245,7 +303,7 @@ inline char* cliAllocNDSeries(char* name, size_t size) {
 // A helper function, which determines the ID of an engine based on its name.
 // If multiple engines with the same name exist, asks for user to disambiguate.
 // Returns -1 if no engine with the name exists.
-inline int cliObtainIdFromName(PGconn* conn, char* engine_name) {
+inline int cliObtainEngineIdFromName(PGconn* conn, char* engine_name) {
     int engine_id = -1;
     int* engine_id_list = pqAllocEngineIdsWithName(conn, engine_name);
     if (engine_id_list == NULL || *engine_id_list == 0) {
@@ -281,6 +339,15 @@ inline int cliObtainIdFromName(PGconn* conn, char* engine_name) {
     printf("\n");
     free(engine_id_list);
     return engine_id;
+}
+
+inline char* cliObtainVersionIdFromName(PGconn* conn, char* engine_id, char* version_name) {
+    char* version_id = pqAllocVersionIdWithName(conn, engine_id, version_name);
+    if (version_id == NULL) {
+        fprintf(stderr, "No version %s associated with the engine.\n", version_name);
+        return NULL;
+    }
+    return version_id;
 }
 
 // Creates a new code_link struct.

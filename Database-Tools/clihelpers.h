@@ -18,13 +18,16 @@ limitations under the License.
 
 extern void cliRootLoop(PGconn* conn);
 extern void cliEngineLoop(PGconn* conn, char* engine_name, char* engine_id);
+extern void cliVersionLoop(PGconn* conn, char* engine_name, char* version_id, char* version_name);
 extern void cliListRootCommands();
 extern void cliListEngineCommands(char* engine_name);
+extern void cliListVersionCommands(char* engine_name, char* version_name);
 
 extern size_t   cliReadInput(char* s, int size);
 extern char*    cliAllocInputString(char* explan, size_t size);
 extern char*    cliAllocNDSeries(char* name, size_t size);
-extern int      cliObtainIdFromName(PGconn* conn, char* engine_name);
+extern int      cliObtainEngineIdFromName(PGconn* conn, char* engine_name);
+extern char*    cliObtainVersionIdFromName(PGconn* conn, char* engine_id, char* version_name);
 
 extern code_link    cliAllocCodeLink();
 extern version      cliAllocVersion();

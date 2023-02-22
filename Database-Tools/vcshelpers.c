@@ -23,6 +23,8 @@ limitations under the License.
 #include "vcshelpers.h"
 #include "pqhelpers.h"
 
+const int HASH_RECORD_LENGTH = 7;
+
 // Returns the number of engines with updates found, or -1 on failure.
 inline int vcsUpdateScan(PGconn* conn) {
     PGresult* res = pqAllocAllSources(conn);
@@ -38,7 +40,7 @@ inline int vcsUpdateScan(PGconn* conn) {
     for (int i = 0; i < PQntuples(res); i += 1) {
         // Read vcs_name to decide what to do.
         if (strncmp(PQgetvalue(res, i, 3), "git", 3) == 0) {
-            time_t commit_time = vcsUpdateScanGit(PQgetvalue(res, i, 2));
+            time_t commit_time = vcsLastTrunkCommitTimeGit(PQgetvalue(res, i, 2));
             char* stored_date_str = pqAllocLatestVersionDate(conn, PQgetvalue(res, i, 1));
             char* stored_date_ptr = stored_date_str;
 
@@ -48,7 +50,7 @@ inline int vcsUpdateScan(PGconn* conn) {
             stored_date_ptr += strcspn(stored_date_ptr, "-") + 1;
             stored_date.tm_mon = atoi(stored_date_ptr) - 1;
             stored_date_ptr += strcspn(stored_date_ptr, "-") + 1;
-            stored_date.tm_mday = atoi(stored_date_ptr);
+            stored_date.tm_mday = atoi(stored_date_ptr) + 1;
             free(stored_date_str);
 
             time_t stored_time = mktime(&stored_date);
@@ -75,14 +77,70 @@ inline int vcsUpdateScan(PGconn* conn) {
     return updateCount;
 }
 
+inline int vcsUpdateTrunkInfo(PGconn* conn, char* version_id) {
+    code_link* source = pqAllocSourceFromVersion(conn, version_id);
+    if (source == NULL) {
+        return -1;
+    }
+
+    if (strncmp(source->vcs, "git", 3) == 0) {
+        git_libgit2_init();
+
+        git_commit* last_commit = vcsAllocLastTrunkCommitGit(source->uri);
+        if (last_commit == NULL) {
+            return -1;
+        }
+
+        time_t commit_time = git_commit_time(last_commit);
+
+        const char* commit_summary = git_commit_summary(last_commit);
+        const git_oid* hash = git_commit_id(last_commit);
+        char* note = errhandMalloc(strlen(commit_summary) + HASH_RECORD_LENGTH + 4);
+        sprintf(note, "[");
+        // git_oid_nfmt could technically fail, but surely it won't :Clueless:
+        git_oid_nfmt((note + 1), HASH_RECORD_LENGTH, hash);
+        sprintf((note + 1 + HASH_RECORD_LENGTH), "] %s", commit_summary);
+
+        pqUpdateVersionDate(conn, version_id, gmtime(&commit_time));
+        pqUpdateVersionNote(conn, version_id, note);
+
+        free(note);
+        git_commit_free(last_commit);
+        git_libgit2_shutdown();
+    } else if (strncmp(source->vcs, "svn", 3) == 0) {
+        //TODO
+    } else if (strncmp(source->vcs, "cvs", 3) == 0) {
+        //TODO
+    } else {
+        fprintf(stderr, "Sources not using version control system cannot automatically be updated.\n");
+    }
+
+    freeCodeLink(*source);
+    free(source);
+    return 0;
+}
+
 // Returns time of last commit, or negative numbers for errors.
-inline time_t vcsUpdateScanGit(char* uri) {
+inline time_t vcsLastTrunkCommitTimeGit(char* uri) {
+    git_commit* last_commit = vcsAllocLastTrunkCommitGit(uri);
+    if (last_commit == NULL) {
+        return -1;
+    }
+
+    time_t last_update_time = git_commit_time(last_commit);
+    git_commit_free(last_commit);
+
+    return last_update_time;
+}
+
+// Returns a pointer to the last git commit made to HEAD in uri. Must be freed.
+inline git_commit* vcsAllocLastTrunkCommitGit(char* uri) {
     git_repository* repo = NULL;
     const char* url = uri;
     char path[4096];
     if (getcwd(path, 4090) == NULL) {
         fprintf(stderr, "Absolute filepath too long.\n");
-        return -1;
+        return NULL;
     }
     strcat(path, "/temp");
 
@@ -92,7 +150,7 @@ inline time_t vcsUpdateScanGit(char* uri) {
     if (err < 0) {
         const git_error* e = git_error_last();
         fprintf(stderr, "Error %d/%d: %s\n", err, e->klass, e->message);
-        return -1;
+        return NULL;
     }
 
     git_oid oid;
@@ -100,22 +158,19 @@ inline time_t vcsUpdateScanGit(char* uri) {
     if (err < 0) {
         const git_error* e = git_error_last();
         fprintf(stderr, "Error %d/%d: %s", err, e->klass, e->message);
-        return -1;
+        return NULL;
     }
 
-    git_commit* latest_commit = NULL;
-    err = git_commit_lookup(&latest_commit, repo, &oid);
+    git_commit* last_commit = NULL;
+    err = git_commit_lookup(&last_commit, repo, &oid);
     if (err < 0) {
         const git_error* e = git_error_last();
         fprintf(stderr, "Error %d/%d: %s", err, e->klass, e->message);
-        return -1;
+        return NULL;
     }
 
-    time_t commit_time = git_commit_time(latest_commit);
-
-    git_commit_free(latest_commit);
     git_repository_free(repo);
     rm_file_recursive(path);
 
-    return commit_time;
+    return last_commit;
 }

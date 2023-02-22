@@ -47,4 +47,8 @@ extern int  pqAddNewPredecessor(PGconn* conn, char* engine_id, int parent_engine
 extern int  pqAddNewVersionOs(PGconn* conn, char* version_id, char* os_name);
 extern int  pqAddNewVersionEgtb(PGconn* conn, char* version_id, char* egtb_name);
 
-extern PGresult*  pqAllocAllSources(PGconn* conn);
+extern PGresult*    pqAllocAllSources(PGconn* conn);
+extern code_link*   pqAllocSourceFromVersion(PGconn* conn, char* version_id);
+
+extern int  pqUpdateVersionDate(PGconn* conn, char* version_id, struct tm* date);
+extern int  pqUpdateVersionNote(PGconn* conn, char* version_id, char* note);

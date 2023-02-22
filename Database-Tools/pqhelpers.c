@@ -75,8 +75,7 @@ inline void pqPrintTable(PGresult* res) {
 inline void pqListEngines(PGconn* conn) {
     PGresult* res;
     
-    res = PQexec(conn,
-        "SELECT engine_id, engine_name, note FROM engine;");
+    res = PQexec(conn, "SELECT engine_name, note FROM engine ORDER BY engine_name ASC;");
     if (PQresultStatus(res) != PGRES_TUPLES_OK) {
         fprintf(stderr, "SELECT failed: %s", PQerrorMessage(conn));
         PQclear(res);
@@ -211,7 +210,8 @@ inline void pqListVersions(PGconn* conn, char* engine_id) {
                         "SELECT version_name, release_date, code_lang_name, "
                         "license_name, accepts_xboard, accepts_uci, v.note "
                         "FROM version v JOIN engine USING (engine_id) JOIN license USING (license_id) "
-                        "JOIN code_lang USING (code_lang_id) WHERE v.engine_id = $1;",
+                        "JOIN code_lang USING (code_lang_id) WHERE v.engine_id = $1 "
+                        "ORDER BY release_date DESC;",
                         1, NULL, paramValues, NULL, NULL, 0);
     if (PQresultStatus(res) != PGRES_TUPLES_OK) {
         fprintf(stderr, "SELECT failed: %s", PQerrorMessage(conn));
@@ -231,7 +231,7 @@ inline void pqListVersionDetails(PGconn* conn, char* version_id) {
                         "SELECT version_name, release_date, code_lang_name, license_name, "
                         "accepts_xboard, accepts_uci, note FROM version "
                         "JOIN license USING (license_id) JOIN code_lang USING (code_lang_id) "
-                        "WHERE version_id = $1;",
+                        "WHERE version_id = $1 ORDER BY release_date DESC;",
                         1, NULL, paramValues, NULL, NULL, 0);
     if (PQresultStatus(res) != PGRES_TUPLES_OK) {
         fprintf(stderr, "SELECT failed: %s", PQerrorMessage(conn));
@@ -572,4 +572,67 @@ inline PGresult* pqAllocAllSources(PGconn* conn) {
                 "JOIN vcs USING (vcs_id) JOIN source_reference USING (source_id) JOIN engine USING (engine_id) "
                 "ORDER BY s.vcs_id DESC;");
     return res;
+}
+
+inline code_link* pqAllocSourceFromVersion(PGconn* conn, char* version_id) {
+    const char* paramValues[1] = { version_id };
+
+    PGresult* res;
+    res = PQexecParams(conn,
+                        "SELECT source_uri, vcs_name FROM source "
+                        "JOIN vcs USING (vcs_id) JOIN source_reference USING (source_id) "
+                        "JOIN version USING (engine_id) WHERE version_id = $1;",
+                        1, NULL, paramValues, NULL, NULL, 0);
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+        fprintf(stderr, "INSERT failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        return NULL;
+    }
+    if (!PQntuples(res)) {
+        fprintf(stderr, "No source links were found for this engine");
+        PQclear(res);
+        return NULL;
+    }
+
+    code_link* source = errhandMalloc(sizeof(code_link));
+    source->uri = errhandStrdup(PQgetvalue(res, 0, 0));
+    source->vcs = errhandStrdup(PQgetvalue(res, 0, 1));
+    PQclear(res);
+
+    return source;
+}
+
+inline int pqUpdateVersionDate(PGconn* conn, char* version_id, struct tm* date) {
+    char tmtodate[40];
+    strftime(tmtodate, 40, "%Y-%m-%d", date);
+
+    const char* paramValues[2] = { tmtodate, version_id };
+
+    PGresult* res;
+    res = PQexecParams(conn,
+                        "UPDATE version SET release_date = $1 WHERE version_id = $2;",
+                        2, NULL, paramValues, NULL, NULL, 0);
+    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
+        fprintf(stderr, "UPDATE failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        return -1;
+    }
+    PQclear(res);
+    return 0;
+}
+
+inline int pqUpdateVersionNote(PGconn* conn, char* version_id, char* note) {
+    const char* paramValues[2] = { note, version_id };
+
+    PGresult* res;
+    res = PQexecParams(conn,
+                        "UPDATE version SET note = $1 WHERE version_id = $2;",
+                        2, NULL, paramValues, NULL, NULL, 0);
+    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
+        fprintf(stderr, "UPDATE failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        return -1;
+    }
+    PQclear(res);
+    return 0;
 }

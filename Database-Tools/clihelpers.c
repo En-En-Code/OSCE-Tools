@@ -168,6 +168,9 @@ inline void cliVersionLoop(PGconn* conn, char* engine_name, char* version_id, ch
         cliReadInput(input, 4096);
         input[0] = toupper(input[0]);
         switch (input[0]) {
+            case 'P':
+                pqListVersionDetails(conn, version_id);
+                break;
             case 'O':
                 char* os_name = strchr(input, ' ');
                 if (os_name == NULL) {
@@ -220,6 +223,7 @@ inline void cliListEngineCommands(char* engine_name) {
 
 inline void cliListVersionCommands(char* engine_name, char* engine_version) {
     printf("What would you like to do with %s %s?\n", engine_name, engine_version);
+    printf("P (Print info for %s %s)\n", engine_name, engine_version);
     printf("O [OS] (Add operating system [OS] compatible with %s %s)\n", engine_name, engine_version);
     printf("T [EGTB] (Add endgame tablebase [EGTB] compatible with %s %s)\n", engine_name, engine_version);
     printf("X (Exit to the engine menu)\n");

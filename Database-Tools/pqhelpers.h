@@ -28,6 +28,7 @@ extern void     pqListEnginesWithName(PGconn* conn, char* engine_name);
 extern void     pqListAuthors(PGconn* conn, char* engine_id);
 extern void     pqListSources(PGconn* conn, char* engine_id);
 extern void     pqListVersions(PGconn* conn, char* engine_id);
+extern void     pqListVersionDetails(PGconn* conn, char* version_id);
 extern char*    pqAllocLatestVersionDate(PGconn* conn, char* engine_id);
 
 extern char*    pqAddNewEngine(PGconn* conn, char* engine_name, char* note);

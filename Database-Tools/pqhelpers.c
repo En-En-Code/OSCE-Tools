@@ -223,6 +223,49 @@ inline void pqListVersions(PGconn* conn, char* engine_id) {
     PQclear(res);
 }
 
+inline void pqListVersionDetails(PGconn* conn, char* version_id) {
+    const char* paramValues[1] = { version_id };
+
+    PGresult* res;
+    res = PQexecParams(conn,
+                        "SELECT version_name, release_date, code_lang_name, license_name, "
+                        "accepts_xboard, accepts_uci, note FROM version "
+                        "JOIN license USING (license_id) JOIN code_lang USING (code_lang_id) "
+                        "WHERE version_id = $1;",
+                        1, NULL, paramValues, NULL, NULL, 0);
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+        fprintf(stderr, "SELECT failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        return;
+    }
+    pqPrintTable(res);
+    PQclear(res);
+
+    res = PQexecParams(conn,
+                        "SELECT os_name FROM compatible_os JOIN os USING (os_id) "
+                        "WHERE version_id = $1;",
+                        1, NULL, paramValues, NULL, NULL, 0);
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+        fprintf(stderr, "SELECT failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        return;
+    }
+    pqPrintTable(res);
+    PQclear(res);
+
+    res = PQexecParams(conn,
+                        "SELECT egtb_name FROM compatible_egtb JOIN egtb USING (egtb_id) "
+                        "WHERE version_id = $1;",
+                        1, NULL, paramValues, NULL, NULL, 0);
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+        fprintf(stderr, "SELECT failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        return;
+    }
+    pqPrintTable(res);
+    PQclear(res);
+}
+
 inline char* pqAllocLatestVersionDate(PGconn* conn, char* engine_id) {
     const char* paramValues[1] = { engine_id };
 

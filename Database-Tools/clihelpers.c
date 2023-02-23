@@ -30,6 +30,7 @@ inline void cliRootLoop(PGconn* conn) {
     char* engine_name = NULL;
     int engine_id;
     
+    printf("Welcome to the database-cli!\n");
     while (input[0] != 'Q') {
         cliListRootCommands();
         cliReadInput(input, 4096);
@@ -43,12 +44,12 @@ inline void cliRootLoop(PGconn* conn) {
                 engine_name = cliAllocInputString("Name of engine", 256);
                 printf("Note(s) for every version of %s: ", engine_name);
                 cliReadInput(input, 4096);
-                char* engine_id_str = pqAddNewEngine(conn, engine_name, strlen(input)?input:NULL);
+                char* engine_id_str = pqInsertEngine(conn, engine_name, strlen(input)?input:NULL);
                 if (engine_id_str != NULL) {
                     cliEngineLoop(conn, engine_name, engine_id_str);
+                    free(engine_id_str);
                 }
                 free(engine_name);
-                free(engine_id_str);
                 break;
             case 'S':
                 engine_name = strchr(input, ' ');
@@ -73,7 +74,6 @@ inline void cliRootLoop(PGconn* conn) {
             default:
                 fprintf(stderr, "Command %c not expected.\n", input[0]);
         }
-        printf("\n");
     }
     
     free(input);
@@ -84,6 +84,7 @@ inline void cliEngineLoop(PGconn* conn, char* engine_name, char* engine_id) {
     input[0] = '\0';
     char* parent_engine_name = NULL;
     int parent_engine_id;
+    char* version_id = NULL;
 
     while (input[0] != 'X') {
         cliListEngineCommands(engine_name);
@@ -98,17 +99,21 @@ inline void cliEngineLoop(PGconn* conn, char* engine_name, char* engine_id) {
                 break;
             case 'A':
                 char* author_names = cliAllocNDSeries("author", 256);
-                pqAddNewNDAuthors(conn, engine_id, author_names);
+                pqInsertNDAuthors(conn, engine_id, author_names);
                 free(author_names);
                 break;
             case 'C':
                 code_link source = cliAllocCodeLink();
-                pqAddNewSource(conn, engine_id, source);
+                pqInsertSource(conn, engine_id, source);
                 freeCodeLink(source);
                 break;
             case 'N':
                 version version_info = cliAllocVersion();
-                pqAddNewVersion(conn, engine_id, version_info);
+                version_id = pqInsertVersion(conn, engine_id, version_info);
+                if (version_id != NULL) {
+                    cliVersionLoop(conn, engine_name, version_id, version_info.versionNum);
+                    free(version_id);
+                }
                 freeVersion(version_info);
                 break;
             case 'I':
@@ -120,7 +125,7 @@ inline void cliEngineLoop(PGconn* conn, char* engine_name, char* engine_id) {
                 parent_engine_name += 1; // Move to the index after the space.
                 parent_engine_id = cliObtainEngineIdFromName(conn, parent_engine_name);
                 if (parent_engine_id != -1) {
-                    pqAddNewInspiration(conn, engine_id, parent_engine_id);
+                    pqInsertInspiration(conn, engine_id, parent_engine_id);
                 }
                 break;
             case 'D':
@@ -132,7 +137,7 @@ inline void cliEngineLoop(PGconn* conn, char* engine_name, char* engine_id) {
                 parent_engine_name += 1; // Move to the index after the space.
                 parent_engine_id = cliObtainEngineIdFromName(conn, parent_engine_name);
                 if (parent_engine_id != -1) {
-                    pqAddNewPredecessor(conn, engine_id, parent_engine_id);
+                    pqInsertPredecessor(conn, engine_id, parent_engine_id);
                 }
                 break;
             case 'S':
@@ -142,7 +147,7 @@ inline void cliEngineLoop(PGconn* conn, char* engine_name, char* engine_id) {
                     break;
                 }
                 version_name += 1; // Move to the index after the space.
-                char* version_id = cliObtainVersionIdFromName(conn, engine_id, version_name);
+                version_id = cliObtainVersionIdFromName(conn, engine_id, version_name);
                 if (version_id != NULL) {
                     cliVersionLoop(conn, engine_name, version_id, version_name);
                     free(version_id);
@@ -177,7 +182,7 @@ inline void cliVersionLoop(PGconn* conn, char* engine_name, char* version_id, ch
                     break;
                 }
                 os_name += 1;
-                pqAddNewVersionOs(conn, version_id, os_name);
+                pqInsertVersionOs(conn, version_id, os_name);
                 break;
             case 'T':
                 char* egtb_name = strchr(input, ' ');
@@ -186,7 +191,7 @@ inline void cliVersionLoop(PGconn* conn, char* engine_name, char* version_id, ch
                     break;
                 }
                 egtb_name += 1;
-                pqAddNewVersionEgtb(conn, version_id, egtb_name);
+                pqInsertVersionEgtb(conn, version_id, egtb_name);
                 break;
             case 'U':
                 vcsUpdateTrunkInfo(conn, version_id);
@@ -202,7 +207,7 @@ inline void cliVersionLoop(PGconn* conn, char* engine_name, char* version_id, ch
 }
 
 inline void cliListRootCommands() {
-    printf("Accepted database commands:\n");
+    printf("\nAccepted database commands:\n");
     printf("E (List all engines)\n");
     printf("N (Create new engine)\n");
     printf("S [NAME] (Select existing engine [NAME])\n");
@@ -211,7 +216,7 @@ inline void cliListRootCommands() {
 }
 
 inline void cliListEngineCommands(char* engine_name) {
-    printf("What would you like to do with %s?\n", engine_name);
+    printf("\nWhat would you like to do with %s?\n", engine_name);
     printf("P (Print info for %s)\n", engine_name);
     printf("A (Add new authors to %s)\n", engine_name);
     printf("C (Add new source code URI to %s)\n", engine_name);
@@ -223,7 +228,7 @@ inline void cliListEngineCommands(char* engine_name) {
 }
 
 inline void cliListVersionCommands(char* engine_name, char* engine_version) {
-    printf("What would you like to do with %s %s?\n", engine_name, engine_version);
+    printf("\nWhat would you like to do with %s %s?\n", engine_name, engine_version);
     printf("P (Print info for %s %s)\n", engine_name, engine_version);
     printf("O [OS] (Add operating system [OS] compatible with %s %s)\n", engine_name, engine_version);
     printf("T [EGTB] (Add endgame tablebase [EGTB] compatible with %s %s)\n", engine_name, engine_version);

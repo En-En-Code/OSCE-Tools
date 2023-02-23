@@ -288,7 +288,7 @@ inline char* pqAllocLatestVersionDate(PGconn* conn, char* engine_id) {
 }
 
 // Returns the engine_id of the engine just inserted on success, NULL on failure.
-inline char* pqAddNewEngine(PGconn* conn, char* engine_name, char* note) {
+inline char* pqInsertEngine(PGconn* conn, char* engine_name, char* note) {
     const char* paramValues[2] = { engine_name, note };
     
     PGresult* res;
@@ -311,7 +311,7 @@ inline char* pqAddNewEngine(PGconn* conn, char* engine_name, char* note) {
 // literals[0] contains the name of the relational table (e.g. engine_authorship, source_reference)
 // literals[1] contains the name of the id table (e.g. author, source)
 // literals[2] contains the name of the value in the id table (e.g. author_name, source_uri)
-inline int pqAddNewNDSeries(PGconn* conn, char* engine_id, char* nd_series, const char** literals) {
+inline int pqInsertNDSeries(PGconn* conn, char* engine_id, char* nd_series, const char** literals) {
     int rows = 0;
     
     int start_loc = 0;
@@ -408,14 +408,14 @@ inline int pqAddRelation(PGconn* conn, char* engine_id, int element_id, const ch
     return 0;
 }
 
-inline int pqAddNewNDAuthors(PGconn* conn, char* engine_id, char* authors) {
+inline int pqInsertNDAuthors(PGconn* conn, char* engine_id, char* authors) {
     const char* literals[3] = { "engine_authorship", "author", "author_name" };
-    return pqAddNewNDSeries(conn, engine_id, authors, literals);
+    return pqInsertNDSeries(conn, engine_id, authors, literals);
 }
 
 // Add a new source link if it does not exist, or retrieve its ID if it does.
 // Then, add a relation between in source_reference behind an engine and the source.
-inline int pqAddNewSource(PGconn* conn, char* engine_id, code_link source) {
+inline int pqInsertSource(PGconn* conn, char* engine_id, code_link source) {
     const char* vcsParamValues[1] = { source.vcs };
     
     PGresult* res_vcs;
@@ -457,7 +457,7 @@ inline int pqAddNewSource(PGconn* conn, char* engine_id, code_link source) {
     return ret;
 }
 
-inline int pqAddNewVersion(PGconn* conn, char* engine_id, version version_info) {
+inline char* pqInsertVersion(PGconn* conn, char* engine_id, version version_info) {
     // Year-MM-DD, the most sane format
     char tmtodate[40];
     strftime(tmtodate, 40, "%Y-%m-%d", &version_info.releaseDate);
@@ -466,7 +466,7 @@ inline int pqAddNewVersion(PGconn* conn, char* engine_id, version version_info) 
     int code_link_id = pqGetElementId(conn, version_info.programLang, code_lang_literals, 0);
     if (code_link_id == -1) {
         fprintf(stderr, "%s was not in the table and is not automatically inserted.\n", version_info.programLang);
-        return -1;
+        return NULL;
     }
     char code_link_id_str[25];
     snprintf(code_link_id_str, 25, "%d", code_link_id);
@@ -475,7 +475,7 @@ inline int pqAddNewVersion(PGconn* conn, char* engine_id, version version_info) 
     int license_id = pqGetElementId(conn, version_info.license, license_literals, 0);
     if (code_link_id == -1) {
         fprintf(stderr, "%s was not in the table and is not automatically inserted.\n", version_info.license);
-        return -1;
+        return NULL;
     }
     char license_id_str[25];
     snprintf(license_id_str, 25, "%d", license_id);
@@ -495,28 +495,30 @@ inline int pqAddNewVersion(PGconn* conn, char* engine_id, version version_info) 
     res = PQexecParams(conn,
                         "INSERT INTO version (engine_id, version_name, release_date, "
                         "code_lang_id, license_id, accepts_xboard, accepts_uci, note) "
-                        "VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+                        "VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING version_id;",
                         8, NULL, paramValues, NULL, NULL, 0);
-    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
         fprintf(stderr, "INSERT failed: %s", PQerrorMessage(conn));
         PQclear(res);
-        return -1;
+        return NULL;
     }
+    char* ret = errhandStrdup(PQgetvalue(res, 0, 0));
+
     PQclear(res);
-    return 0;
+    return ret;
 }
 
-inline int pqAddNewInspiration(PGconn* conn, char* engine_id, int parent_engine_id) {
+inline int pqInsertInspiration(PGconn* conn, char* engine_id, int parent_engine_id) {
     const char* literals[2] = { "inspiration", "parent_engine" };
     return pqAddRelation(conn, engine_id, parent_engine_id, literals);
 }
 
-inline int pqAddNewPredecessor(PGconn* conn, char* engine_id, int parent_engine_id) {
+inline int pqInsertPredecessor(PGconn* conn, char* engine_id, int parent_engine_id) {
     const char* literals[2] = { "predecessor", "parent_engine" };
     return pqAddRelation(conn, engine_id, parent_engine_id, literals);
 }
 
-inline int pqAddNewVersionOs(PGconn* conn, char* version_id, char* os_name) {
+inline int pqInsertVersionOs(PGconn* conn, char* version_id, char* os_name) {
     const char* os_literals[3] = {NULL, "os", "os_name"};
     int os_id = pqGetElementId(conn, os_name, os_literals, 0);
     if (os_id == -1) {
@@ -540,7 +542,7 @@ inline int pqAddNewVersionOs(PGconn* conn, char* version_id, char* os_name) {
     return 0;
 }
 
-inline int pqAddNewVersionEgtb(PGconn* conn, char* version_id, char* egtb_name) {
+inline int pqInsertVersionEgtb(PGconn* conn, char* version_id, char* egtb_name) {
     const char* egtb_literals[3] = {NULL, "egtb", "egtb_name"};
     int egtb_id = pqGetElementId(conn, egtb_name, egtb_literals, 0);
     if (egtb_id == -1) {

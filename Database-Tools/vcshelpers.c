@@ -57,6 +57,7 @@ inline int vcsUpdateScan(PGconn* conn) {
 
             if (commit_time > stored_time) {
                 printf("%s has updates available at %s.\n", PQgetvalue(res, i, 0), PQgetvalue(res, i, 2));
+                fflush(stdout);
                 updateCount += 1;
             }
         } else if (strncmp(PQgetvalue(res, i, 3), "svn", 3) == 0) {
@@ -65,9 +66,11 @@ inline int vcsUpdateScan(PGconn* conn) {
             // TODO
         } else if (strncmp(PQgetvalue(res, i, 3), "n/a", 3) == 0) {
             printf("%s may have updates; check %s manually.\n", PQgetvalue(res, i, 0), PQgetvalue(res, i, 2));
+            fflush(stdout);
         } else if (strncmp(PQgetvalue(res, i, 3), "rhv", 3) != 0) {
             // I choose (for the moment), to not be informed about engines residing in archives.
-            fprintf(stderr, "Unrecognized vcs %s\n", PQgetvalue(res, i, 2));
+            fprintf(stderr, "Unrecognized vcs %s for %s.\n", PQgetvalue(res, i, 2), PQgetvalue(res, i, 0));
+            fflush(stderr);
         }
     }
 

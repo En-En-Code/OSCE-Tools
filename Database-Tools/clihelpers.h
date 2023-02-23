@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+#ifndef CLIHELPERS_H
+#define CLIHELPERS_H
+
 #include "globals.h"
 
 extern void cliRootLoop(PGconn* conn);
@@ -31,3 +34,5 @@ extern char*    cliObtainVersionIdFromName(PGconn* conn, char* engine_id, char* 
 
 extern code_link    cliAllocCodeLink();
 extern version      cliAllocVersion();
+
+#endif

@@ -14,10 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include <git2.h>
+#ifndef VCSHELPERS_H
+#define VCSHELPERS_H
 
-#ifndef VCS_H
-#define VCS_H
+#include <git2.h>
 
 extern int vcsUpdateScan(PGconn* conn);
 extern int vcsUpdateTrunkInfo(PGconn* conn, char* version_id);
@@ -26,4 +26,4 @@ extern time_t vcsLastTrunkCommitTimeGit(char* uri);
 
 extern git_commit* vcsAllocLastTrunkCommitGit(char* uri);
 
-#endif VCS_H
+#endif

@@ -14,10 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include <time.h>
-
 #ifndef GLOBALS_H
 #define GLOBALS_H
+
+#include <time.h>
 
 typedef struct {
     char* versionNum;
@@ -40,6 +40,8 @@ extern char* errhandStrdup(const char* s);
 extern void freeVersion(version v);
 extern void freeCodeLink(code_link cl);
 
+struct FTW;
+struct stat;
 extern int  rm_file(const char* fpath, const struct stat* sb, int typeflag, struct FTW* ftwbuf);
 extern int  rm_file_recursive(char* fpath);
 

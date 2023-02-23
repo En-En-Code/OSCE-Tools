@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+#ifndef PQHELPERS_H
+#define PQHELPERS_H
+
 #include "globals.h"
 
 extern PGconn* pqInitConnection(const char* conninfo);
@@ -31,24 +34,26 @@ extern void     pqListVersions(PGconn* conn, char* engine_id);
 extern void     pqListVersionDetails(PGconn* conn, char* version_id);
 extern char*    pqAllocLatestVersionDate(PGconn* conn, char* engine_id);
 
-extern char*    pqAddNewEngine(PGconn* conn, char* engine_name, char* note);
+extern char*    pqInsertEngine(PGconn* conn, char* engine_name, char* note);
 
-extern int  pqAddNewNDSeries(PGconn* conn, char* engine_id, char* nd_series, const char** literals);
+extern int  pqInsertNDSeries(PGconn* conn, char* engine_id, char* nd_series, const char** literals);
 
 extern int  pqGetElementId(PGconn* conn, char* element, const char** literals, int insert_on_fail);
 extern int  pqAddRelation(PGconn* conn, char* engine_id, int element_id, const char** literals);
 
-extern int  pqAddNewNDAuthors(PGconn* conn, char* engine_id, char* authors);
+extern int  pqInsertNDAuthors(PGconn* conn, char* engine_id, char* authors);
 
-extern int  pqAddNewSource(PGconn* conn, char* engine_id, code_link source);
-extern int  pqAddNewVersion(PGconn* conn, char* engine_id, version version_info);
-extern int  pqAddNewInspiration(PGconn* conn, char* engine_id, int parent_engine_id);
-extern int  pqAddNewPredecessor(PGconn* conn, char* engine_id, int parent_engine_id);
-extern int  pqAddNewVersionOs(PGconn* conn, char* version_id, char* os_name);
-extern int  pqAddNewVersionEgtb(PGconn* conn, char* version_id, char* egtb_name);
+extern int      pqInsertSource(PGconn* conn, char* engine_id, code_link source);
+extern char*    pqInsertVersion(PGconn* conn, char* engine_id, version version_info);
+extern int      pqInsertInspiration(PGconn* conn, char* engine_id, int parent_engine_id);
+extern int      pqInsertPredecessor(PGconn* conn, char* engine_id, int parent_engine_id);
+extern int      pqInsertVersionOs(PGconn* conn, char* version_id, char* os_name);
+extern int      pqInsertVersionEgtb(PGconn* conn, char* version_id, char* egtb_name);
 
 extern PGresult*    pqAllocAllSources(PGconn* conn);
 extern code_link*   pqAllocSourceFromVersion(PGconn* conn, char* version_id);
 
 extern int  pqUpdateVersionDate(PGconn* conn, char* version_id, struct tm* date);
 extern int  pqUpdateVersionNote(PGconn* conn, char* version_id, char* note);
+
+#endif

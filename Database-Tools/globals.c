@@ -71,6 +71,20 @@ inline void freeCodeLink(code_link cl) {
     free(cl.vcs);
 }
 
+// converts a char* of the format %Y-%m-%d into a time_t
+inline time_t readDate(const char* date_str) {
+    const char* date_str_ptr = date_str;
+
+    struct tm stored_date = { 0 };
+    stored_date.tm_year = atoi(date_str_ptr) - 1900;
+    date_str_ptr += strcspn(date_str_ptr, "-") + 1;
+    stored_date.tm_mon = atoi(date_str_ptr) - 1;
+    date_str_ptr += strcspn(date_str_ptr, "-") + 1;
+    stored_date.tm_mday = atoi(date_str_ptr) + 1;
+
+    return mktime(&stored_date);
+}
+
 // A pair of helper functions based on https://stackoverflow.com/a/5467788
 // Deletes a directory and its contents recursively.
 inline int rm_file(const char* fpath, const struct stat* sb, int typeflag, struct FTW* ftwbuf) {

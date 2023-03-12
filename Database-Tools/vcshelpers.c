@@ -18,10 +18,18 @@ limitations under the License.
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#include <math.h>
 #include <libpq-fe.h>
 #include <git2.h>
+#include <svn_client.h>
+#include <svn_config.h>
+#include <svn_error.h>
+#include <svn_opt.h>
+#include <svn_pools.h>
+#include <svn_props.h>
 #include "vcshelpers.h"
 #include "pqhelpers.h"
+#include "globals.h"
 
 const int HASH_RECORD_LENGTH = 7;
 
@@ -34,26 +42,14 @@ inline int vcsUpdateScan(PGconn* conn) {
         return -1;
     }
 
-    git_libgit2_init();
-    
     int updateCount = 0;
     for (int i = 0; i < PQntuples(res); i += 1) {
         // Read vcs_name to decide what to do.
         if (strncmp(PQgetvalue(res, i, 3), "git", 3) == 0) {
             time_t commit_time = vcsLastTrunkCommitTimeGit(PQgetvalue(res, i, 2));
             char* stored_date_str = pqAllocLatestVersionDate(conn, PQgetvalue(res, i, 1));
-            char* stored_date_ptr = stored_date_str;
-
-            // stored_date_str is in %Y-%m-%d format.
-            struct tm stored_date = { 0 };
-            stored_date.tm_year = atoi(stored_date_ptr) - 1900;
-            stored_date_ptr += strcspn(stored_date_ptr, "-") + 1;
-            stored_date.tm_mon = atoi(stored_date_ptr) - 1;
-            stored_date_ptr += strcspn(stored_date_ptr, "-") + 1;
-            stored_date.tm_mday = atoi(stored_date_ptr) + 1;
+            time_t stored_time = readDate(stored_date_str);
             free(stored_date_str);
-
-            time_t stored_time = mktime(&stored_date);
 
             if (commit_time > stored_time) {
                 printf("%s has updates available at %s.\n", PQgetvalue(res, i, 0), PQgetvalue(res, i, 2));
@@ -61,7 +57,18 @@ inline int vcsUpdateScan(PGconn* conn) {
                 updateCount += 1;
             }
         } else if (strncmp(PQgetvalue(res, i, 3), "svn", 3) == 0) {
-            // TODO
+            apr_pool_t* pool = svn_pool_create(NULL);
+            time_t commit_time = vcsLastTrunkCommitTimeSvn(PQgetvalue(res, i, 2), pool);
+            char* stored_date_str = pqAllocLatestVersionDate(conn, PQgetvalue(res, i, 1));
+            time_t stored_time = readDate(stored_date_str);
+            free(stored_date_str);
+
+            if (commit_time > stored_time) {
+                printf("%s has updates available at %s.\n", PQgetvalue(res, i, 0), PQgetvalue(res, i, 2));
+                fflush(stdout);
+                updateCount += 1;
+            }
+            svn_pool_destroy(pool);
         } else if (strncmp(PQgetvalue(res, i, 3), "cvs", 3) == 0) {
             // TODO
         } else if (strncmp(PQgetvalue(res, i, 3), "n/a", 3) == 0) {
@@ -75,7 +82,6 @@ inline int vcsUpdateScan(PGconn* conn) {
     }
 
     PQclear(res);
-    git_libgit2_shutdown();
 
     return updateCount;
 }
@@ -87,10 +93,10 @@ inline int vcsUpdateTrunkInfo(PGconn* conn, char* version_id) {
     }
 
     if (strncmp(source->vcs, "git", 3) == 0) {
-        git_libgit2_init();
-
         git_commit* last_commit = vcsAllocLastTrunkCommitGit(source->uri);
         if (last_commit == NULL) {
+            freeCodeLink(*source);
+            free(source);
             return -1;
         }
 
@@ -109,13 +115,34 @@ inline int vcsUpdateTrunkInfo(PGconn* conn, char* version_id) {
 
         free(note);
         git_commit_free(last_commit);
-        git_libgit2_shutdown();
     } else if (strncmp(source->vcs, "svn", 3) == 0) {
-        //TODO
+        apr_pool_t* pool = svn_pool_create(NULL);
+        svn_commit* last_commit = vcsAllocLastTrunkCommitSvn(source->uri, pool);
+        if (last_commit == NULL) {
+            svn_pool_destroy(pool);
+            freeCodeLink(*source);
+            free(source);
+            return -1;
+        }
+
+        time_t commit_date = readDate(svn_prop_get_value(last_commit->revprops, SVN_PROP_REVISION_DATE));
+
+        const char* commit_summary = svn_prop_get_value(last_commit->revprops, SVN_PROP_REVISION_LOG);
+        if (commit_summary == NULL) {
+            commit_summary = "";
+        }
+        char* note = errhandMalloc(strcspn(commit_summary, "\n") + floor(log10(last_commit->rev_num) + 1) + 5);
+        sprintf(note, "[r%ld] %.*s", last_commit->rev_num, (int)strcspn(commit_summary, "\n"), commit_summary);
+
+        pqUpdateVersionDate(conn, version_id, gmtime(&commit_date));
+        pqUpdateVersionNote(conn, version_id, note);
+        
+        free(note);
+        svn_pool_destroy(pool);
     } else if (strncmp(source->vcs, "cvs", 3) == 0) {
         //TODO
     } else {
-        fprintf(stderr, "Sources not using version control system cannot automatically be updated.\n");
+        fprintf(stderr, "Sources not using a version control system cannot automatically be updated.\n");
     }
 
     freeCodeLink(*source);
@@ -134,6 +161,15 @@ inline time_t vcsLastTrunkCommitTimeGit(char* uri) {
     git_commit_free(last_commit);
 
     return last_update_time;
+}
+
+inline time_t vcsLastTrunkCommitTimeSvn(char* uri, apr_pool_t* pool) {
+    svn_commit* last_commit = vcsAllocLastTrunkCommitSvn(uri, pool);
+    if (last_commit == NULL) {
+        return -1;
+    }
+
+    return readDate(svn_prop_get_value(last_commit->revprops, SVN_PROP_REVISION_DATE));
 }
 
 // Returns a pointer to the last git commit made to HEAD in uri. Must be freed.
@@ -174,6 +210,42 @@ inline git_commit* vcsAllocLastTrunkCommitGit(char* uri) {
 
     git_repository_free(repo);
     rm_file_recursive(path);
+
+    return last_commit;
+}
+
+// Memory is allocated by pool, which must be freed when finished.
+inline svn_commit* vcsAllocLastTrunkCommitSvn(char* uri, apr_pool_t* pool) {
+    svn_error_t* err;
+    const char* url = uri;
+
+    err = svn_config_ensure(NULL, pool);
+    if (err != NULL) {
+        svn_handle_error2(err, stderr, 0, "svn_err: ");
+        return NULL;
+    }
+
+    svn_client_ctx_t* ctx = NULL;
+    err = svn_client_create_context2(&ctx, NULL, pool);
+    if (err != NULL) {
+        svn_handle_error2(err, stderr, 0, "svn_err: ");
+        return NULL;
+    }
+    err = svn_config_get_config(&ctx->config, NULL, pool);
+    if (err != NULL) {
+        svn_handle_error2(err, stderr, 0, "svn_err: ");
+        return NULL;
+    }
+
+    svn_commit* last_commit = apr_palloc(pool, sizeof(svn_commit));
+    last_commit->rev_num = SVN_INVALID_REVNUM;
+    svn_opt_revision_t rev;
+    rev.kind = svn_opt_revision_head;
+    err = svn_client_revprop_list(&last_commit->revprops, url, &rev, &last_commit->rev_num, ctx, pool);
+    if (err != NULL) {
+        svn_handle_error2(err, stderr, 0, "svn_err: ");
+        return NULL;
+    }
 
     return last_commit;
 }

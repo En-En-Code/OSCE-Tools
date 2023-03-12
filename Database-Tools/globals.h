@@ -40,6 +40,8 @@ extern char* errhandStrdup(const char* s);
 extern void freeVersion(version v);
 extern void freeCodeLink(code_link cl);
 
+extern time_t readDate(const char* date_str);
+
 struct FTW;
 struct stat;
 extern int  rm_file(const char* fpath, const struct stat* sb, int typeflag, struct FTW* ftwbuf);

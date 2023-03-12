@@ -13,15 +13,17 @@
 # limitations under the License.
 
 CC := gcc
-EXEC := a.out
+EXEC := engine-db-cli
 
 SRC_FILES := $(wildcard *.c)
 OBJ_FILES := $(patsubst %.c,%.o,$(SRC_FILES))
+HEAD_FILES := libgit2 libpq libsvn_subr libsvn_client
 
 CFLAGS := $(CFLAGS)
-CFLAGS += $(shell pkg-config --cflags libgit2 libpq)
+CFLAGS += $(shell pkg-config --cflags $(HEAD_FILES))
 CFLAGS += -Wall
-LIBFLAGS = $(shell pkg-config --libs libgit2 libpq)
+LIBFLAGS = $(shell pkg-config --libs $(HEAD_FILES))
+LIBFLAGS += -lm
 
 all: $(EXEC)
 

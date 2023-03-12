@@ -15,6 +15,8 @@ limitations under the License.
 */
 
 #include <libpq-fe.h>
+#include <git2.h>
+#include <svn_cmdline.h>
 #include "clihelpers.h"
 #include "pqhelpers.h"
 
@@ -28,10 +30,16 @@ int main(int argc, char** argv) {
         conninfo = "dbname=engine_db";
     }
 
+    if (svn_cmdline_init("svn", stderr) != EXIT_SUCCESS) {
+        return EXIT_FAILURE;
+    }
     conn = pqInitConnection(conninfo);
-    
+    git_libgit2_init();
+
     cliRootLoop(conn);
     
     PQfinish(conn);
-    return 0;
+    git_libgit2_shutdown();
+
+    return EXIT_SUCCESS;
 }

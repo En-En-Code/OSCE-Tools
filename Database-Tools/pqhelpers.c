@@ -153,6 +153,23 @@ inline void pqListEnginesWithName(PGconn* conn, char* engine_name) {
     PQclear(res);
 }
 
+inline void pqListNote(PGconn* conn, char* engine_id) {
+    const char* paramValues[1] = { engine_id };
+
+    PGresult* res;
+    res = PQexecParams(conn,
+                        "SELECT note FROM engine WHERE engine_id = $1;",
+                        1, NULL, paramValues, NULL, NULL, 0);
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+        fprintf(stderr, "SELECT failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        return;
+    }
+    pqPrintTable(res);
+    
+    PQclear(res);
+}
+
 inline void pqListAuthors(PGconn* conn, char* engine_id) {
     const char* paramValues[1] = { engine_id };
     

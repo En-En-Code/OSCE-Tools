@@ -93,6 +93,7 @@ inline void cliEngineLoop(PGconn* conn, char* engine_name, char* engine_id) {
         
         switch (input[0]) {
             case 'P':
+                pqListNote(conn, engine_id);
                 pqListAuthors(conn, engine_id);
                 pqListSources(conn, engine_id);
                 pqListVersions(conn, engine_id);
@@ -208,32 +209,32 @@ inline void cliVersionLoop(PGconn* conn, char* engine_name, char* version_id, ch
 
 inline void cliListRootCommands() {
     printf("\nAccepted database commands:\n");
-    printf("E (List all engines)\n");
-    printf("N (Create new engine)\n");
+    printf("E        (List all engines)\n");
+    printf("N        (Create new engine)\n");
     printf("S [NAME] (Select existing engine [NAME])\n");
-    printf("U (Check engines for updates)\n");
-    printf("Q (Quit)\n");
+    printf("U        (Check engines for updates)\n");
+    printf("Q        (Quit)\n");
 }
 
 inline void cliListEngineCommands(char* engine_name) {
     printf("\nWhat would you like to do with %s?\n", engine_name);
-    printf("P (Print info for %s)\n", engine_name);
-    printf("A (Add new authors to %s)\n", engine_name);
-    printf("C (Add new source code URI to %s)\n", engine_name);
-    printf("N (Create new version of %s)\n", engine_name);
+    printf("P        (Print info for %s)\n", engine_name);
+    printf("A        (Add new authors to %s)\n", engine_name);
+    printf("C        (Add new source code URI to %s)\n", engine_name);
+    printf("N        (Create new version of %s)\n", engine_name);
     printf("I [NAME] (Add engine [NAME] as an inspiration)\n");
     printf("D [NAME] (Add engine [NAME] as a predecessor)\n");
-    printf("S [VER] (Select existing version [VER])\n");
-    printf("X (Exit to the root menu)\n");
+    printf("S [VER]  (Select existing version [VER])\n");
+    printf("X        (Exit to the root menu)\n");
 }
 
 inline void cliListVersionCommands(char* engine_name, char* engine_version) {
     printf("\nWhat would you like to do with %s %s?\n", engine_name, engine_version);
-    printf("P (Print info for %s %s)\n", engine_name, engine_version);
-    printf("O [OS] (Add operating system [OS] compatible with %s %s)\n", engine_name, engine_version);
+    printf("P        (Print info for %s %s)\n", engine_name, engine_version);
+    printf("O [OS]   (Add operating system [OS] compatible with %s %s)\n", engine_name, engine_version);
     printf("T [EGTB] (Add endgame tablebase [EGTB] compatible with %s %s)\n", engine_name, engine_version);
-    printf("U (Pull updates from HEAD)\n");
-    printf("X (Exit to the engine menu)\n");
+    printf("U        (Pull updates from HEAD)\n");
+    printf("X        (Exit to the engine menu)\n");
 }
 
 // An fgets-stdin wrapper which handles possible fgets errors.

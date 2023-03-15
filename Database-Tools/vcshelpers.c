@@ -52,9 +52,12 @@ inline int vcsUpdateScan(PGconn* conn) {
             free(stored_date_str);
 
             if (commit_time > stored_time) {
-                printf("%s has updates available at %s.\n", PQgetvalue(res, i, 0), PQgetvalue(res, i, 2));
+                printf("\n%s has updates available at %s\n", PQgetvalue(res, i, 0), PQgetvalue(res, i, 2));
                 fflush(stdout);
                 updateCount += 1;
+            } else {
+                printf(".");
+                fflush(stdout);
             }
         } else if (strncmp(PQgetvalue(res, i, 3), "svn", 3) == 0) {
             apr_pool_t* pool = svn_pool_create(NULL);
@@ -64,19 +67,22 @@ inline int vcsUpdateScan(PGconn* conn) {
             free(stored_date_str);
 
             if (commit_time > stored_time) {
-                printf("%s has updates available at %s.\n", PQgetvalue(res, i, 0), PQgetvalue(res, i, 2));
+                printf("\n%s has updates available at %s\n", PQgetvalue(res, i, 0), PQgetvalue(res, i, 2));
                 fflush(stdout);
                 updateCount += 1;
+            } else {
+                printf(".");
+                fflush(stdout);
             }
             svn_pool_destroy(pool);
         } else if (strncmp(PQgetvalue(res, i, 3), "cvs", 3) == 0) {
             // TODO
         } else if (strncmp(PQgetvalue(res, i, 3), "n/a", 3) == 0) {
-            printf("%s may have updates; check %s manually.\n", PQgetvalue(res, i, 0), PQgetvalue(res, i, 2));
+            printf("\n%s may have updates; check %s manually.\n", PQgetvalue(res, i, 0), PQgetvalue(res, i, 2));
             fflush(stdout);
         } else if (strncmp(PQgetvalue(res, i, 3), "rhv", 3) != 0) {
             // I choose (for the moment), to not be informed about engines residing in archives.
-            fprintf(stderr, "Unrecognized vcs %s for %s.\n", PQgetvalue(res, i, 2), PQgetvalue(res, i, 0));
+            fprintf(stderr, "Unrecognized vcs %s for %s\n", PQgetvalue(res, i, 2), PQgetvalue(res, i, 0));
             fflush(stderr);
         }
     }

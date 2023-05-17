@@ -21,9 +21,9 @@ HEAD_FILES := libgit2 libpq libsvn_subr libsvn_client
 
 CFLAGS := $(CFLAGS)
 CFLAGS += $(shell pkg-config --cflags $(HEAD_FILES))
-CFLAGS += -Wall
+CFLAGS += -Wall -O3
 LIBFLAGS = $(shell pkg-config --libs $(HEAD_FILES))
-LIBFLAGS += -lm
+LIBFLAGS += -lm -pthread
 
 all: $(EXEC)
 

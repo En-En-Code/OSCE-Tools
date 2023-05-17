@@ -33,6 +33,17 @@ inline void* errhandMalloc(size_t size) {
     return ptr;
 }
 
+// Memory is allocated by this function to store ptr.
+// Free must be called when finished with the returned value.
+inline void* errhandCalloc(size_t num, size_t size) {
+    void* ptr = calloc(num, size);
+    if (ptr == NULL) {
+        fprintf(stderr, "Not enough memory to perform allocation.\n");
+        exit(1);
+    }
+    return ptr;
+}
+
 // Memory is allocated by this function to store new_ptr.
 // Free must be called when finished with the returned value.
 // Note this function can possibly free memory if size = 0.

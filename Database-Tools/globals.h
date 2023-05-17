@@ -34,6 +34,7 @@ typedef struct {
 } code_link;
 
 extern void* errhandMalloc(size_t size);
+extern void* errhandCalloc(size_t num, size_t size);
 extern void* errhandRealloc(void* ptr, size_t size);
 extern char* errhandStrdup(const char* s);
 

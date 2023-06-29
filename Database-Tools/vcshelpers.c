@@ -36,6 +36,8 @@ limitations under the License.
 const int HASH_RECORD_LENGTH = 7;
 const int MAX_PTHREADS = 8;
 sem_t conn_lock;
+sem_t idx_lock;
+int scan_idx;
 
 // Returns the number of engines with updates found, or -1 on failure.
 inline int vcsUpdateScan(PGconn* conn) {
@@ -48,10 +50,11 @@ inline int vcsUpdateScan(PGconn* conn) {
     }
 
     sem_init(&conn_lock, 0, 1);
+    scan_idx = 0;
+    sem_init(&idx_lock, 0, 1);
     pthread_t tid[MAX_PTHREADS];
     scan_thread_info* td = errhandCalloc(MAX_PTHREADS, sizeof(*td));
     for (int i = 0; i < MAX_PTHREADS; i++) {
-        td[i].thread_num = i;
         td[i].res = res;
         td[i].conn = conn;
         td[i].count = 0;
@@ -66,10 +69,11 @@ inline int vcsUpdateScan(PGconn* conn) {
 
     PQclear(res);
     sem_destroy(&conn_lock);
+    sem_destroy(&idx_lock);
     free(td);
     clock_t end = clock();
     double len = (end-start)*1000/CLOCKS_PER_SEC;
-    printf("CPU time: %.1f ms\n", len);
+    printf("\nCPU time: %.1f ms\n", len);
 
     return update_count;
 }
@@ -80,7 +84,12 @@ void* vcsUpdateScanThread(void* td) {
     scan_thread_info* thread_info = td;
     PGresult* res = thread_info->res;
     PGconn* conn = thread_info->conn;
-    for (int i = thread_info->thread_num; i < PQntuples(res); i += MAX_PTHREADS) {
+
+    sem_wait(&idx_lock);
+    int i = scan_idx;
+    scan_idx += 1;
+    sem_post(&idx_lock);
+    while (i < PQntuples(res)) {
         // Read vcs_name to decide what to do.
         if (strncmp(PQgetvalue(res, i, 3), "git", 3) == 0) {
             time_t commit_time = vcsLastTrunkCommitTimeGit(PQgetvalue(res, i, 2));
@@ -126,6 +135,10 @@ void* vcsUpdateScanThread(void* td) {
             fprintf(stderr, "Unrecognized vcs %s for %s\n", PQgetvalue(res, i, 2), PQgetvalue(res, i, 0));
             fflush(stderr);
         }
+        sem_wait(&idx_lock);
+        i = scan_idx;
+        scan_idx += 1;
+        sem_post(&idx_lock);
     }
     thread_info->count = update_count;
     return NULL;  //I don't need anything returned really.

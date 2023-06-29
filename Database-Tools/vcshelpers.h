@@ -28,7 +28,6 @@ typedef struct {
 } svn_commit;
 
 typedef struct {
-    int thread_num;
     PGresult* res;
     PGconn* conn;
     int count;

@@ -48,6 +48,9 @@ inline int vcsUpdateScan(PGconn* conn) {
         PQclear(res);
         return -1;
     }
+    if (pqCreateUpdateTable(conn) == -1) {
+        return -1;
+    }
 
     sem_init(&conn_lock, 0, 1);
     scan_idx = 0;
@@ -68,6 +71,10 @@ inline int vcsUpdateScan(PGconn* conn) {
     }
 
     PQclear(res);
+    printf("\n");
+    pqSummarizeUpdateTable(conn);
+    pqDropUpdateTable(conn);
+
     sem_destroy(&conn_lock);
     sem_destroy(&idx_lock);
     free(td);
@@ -84,12 +91,13 @@ void* vcsUpdateScanThread(void* td) {
     scan_thread_info* thread_info = td;
     PGresult* res = thread_info->res;
     PGconn* conn = thread_info->conn;
+    int tuples = PQntuples(res);
 
     sem_wait(&idx_lock);
     int i = scan_idx;
     scan_idx += 1;
     sem_post(&idx_lock);
-    while (i < PQntuples(res)) {
+    while (i < tuples) {
         // Read vcs_name to decide what to do.
         if (strncmp(PQgetvalue(res, i, 3), "git", 3) == 0) {
             time_t commit_time = vcsLastTrunkCommitTimeGit(PQgetvalue(res, i, 2));
@@ -100,13 +108,13 @@ void* vcsUpdateScanThread(void* td) {
             free(stored_date_str);
 
             if (commit_time > stored_time) {
-                printf("\n%s has updates available at %s\n", PQgetvalue(res, i, 0), PQgetvalue(res, i, 2));
-                fflush(stdout);
+                sem_wait(&conn_lock);
+                pqInsertUpdate(conn, PQgetvalue(res, i, 1), PQgetvalue(res, i, 4));
+                sem_post(&conn_lock);
                 update_count += 1;
-            } else {
-                printf(".");
-                fflush(stdout);
             }
+            printf(".");
+            fflush(stdout);
         } else if (strncmp(PQgetvalue(res, i, 3), "svn", 3) == 0) {
             apr_pool_t* pool = svn_pool_create(NULL);
             time_t commit_time = vcsLastTrunkCommitTimeSvn(PQgetvalue(res, i, 2), pool);
@@ -117,18 +125,21 @@ void* vcsUpdateScanThread(void* td) {
             free(stored_date_str);
 
             if (commit_time > stored_time) {
-                printf("\n%s has updates available at %s\n", PQgetvalue(res, i, 0), PQgetvalue(res, i, 2));
-                fflush(stdout);
+                sem_wait(&conn_lock);
+                pqInsertUpdate(conn, PQgetvalue(res, i, 1), PQgetvalue(res, i, 4));
+                sem_post(&conn_lock);
                 update_count += 1;
-            } else {
-                printf(".");
-                fflush(stdout);
             }
+            printf(".");
+            fflush(stdout);
+
             svn_pool_destroy(pool);
         } else if (strncmp(PQgetvalue(res, i, 3), "cvs", 3) == 0) {
             // TODO
         } else if (strncmp(PQgetvalue(res, i, 3), "n/a", 3) == 0) {
-            printf("\n%s may have updates; check %s manually.\n", PQgetvalue(res, i, 0), PQgetvalue(res, i, 2));
+            sem_wait(&conn_lock);
+            pqInsertUpdate(conn, PQgetvalue(res, i, 1), PQgetvalue(res, i, 4));
+            sem_post(&conn_lock);
             fflush(stdout);
         } else if (strncmp(PQgetvalue(res, i, 3), "rhv", 3) != 0) {
             // I choose (for the moment), to not be informed about engines residing in archives.

@@ -587,9 +587,8 @@ inline int pqInsertVersionEgtb(PGconn* conn, char* version_id, char* egtb_name) 
 inline PGresult* pqAllocAllSources(PGconn* conn) {
     PGresult* res;
     res = PQexec(conn,
-                "SELECT engine_name, engine_id, source_uri, vcs_name FROM source s "
-                "JOIN vcs USING (vcs_id) JOIN source_reference USING (source_id) JOIN engine USING (engine_id) "
-                "ORDER BY s.vcs_id DESC;");
+                "SELECT engine_name, engine_id, source_uri, vcs_name, source_id FROM source s "
+                "JOIN vcs USING (vcs_id) JOIN source_reference USING (source_id) JOIN engine USING (engine_id);");
     return res;
 }
 
@@ -619,6 +618,74 @@ inline code_link* pqAllocSourceFromVersion(PGconn* conn, char* version_id) {
     PQclear(res);
 
     return source;
+}
+
+// Returns 0 on success of creating the table, and -1 on failure
+inline int pqCreateUpdateTable(PGconn* conn) {
+    PGresult* res;
+    res = PQexec(conn, "CREATE TABLE update ("
+                            "engine_id   int REFERENCES engine (engine_id),"
+                            "source_id   int REFERENCES source (source_id),"
+                            "PRIMARY KEY (engine_id, source_id) );");
+    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
+        fprintf(stderr, "CREATE TABLE failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        return -1;
+    }
+    PQclear(res);
+    return 0;
+}
+
+// Returns 0 on success of creating the table, and -1 on failure
+inline int pqInsertUpdate(PGconn* conn, char* engine_id, char* source_id) {
+    const char* paramValues[2] = { engine_id, source_id };
+
+    PGresult* res;
+    res = PQexecParams(conn, "INSERT INTO update (engine_id, source_id) VALUES ($1, $2);",
+                            2, NULL, paramValues, NULL, NULL, 0);
+    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
+        fprintf(stderr, "INSERT failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        return -1;
+    }
+    PQclear(res);
+    return 0;
+}
+
+inline void pqSummarizeUpdateTable(PGconn* conn) {
+    PGresult* res;
+    res = PQexec(conn, "SELECT engine_name, source_uri, vcs_name FROM update "
+                        "JOIN engine USING (engine_id) JOIN source USING (source_id) "
+                        "JOIN vcs USING (vcs_id) ORDER BY engine_name ASC;");
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+        fprintf(stderr, "SELECT failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        return;
+    }
+    int i = 0;
+    int tuples = PQntuples(res);
+    while (i < tuples) {
+        char* vcs = PQgetvalue(res, i, 2);
+        if (strncmp(vcs, "git", 3) == 0 || strncmp(vcs, "svn", 3) == 0 || strncmp(vcs, "cvs", 3) == 0) {
+            printf("%s has updates available at %s\n", PQgetvalue(res, i, 0), PQgetvalue(res, i, 1));
+        } else if (strncmp(vcs, "rhv", 3) == 0) {
+            printf("%s may have updates; check manually.\n", PQgetvalue(res, i, 0));
+        }
+        i += 1;
+    }
+}
+
+// Returns 0 on success of creating the table, and -1 on failure
+inline int pqDropUpdateTable(PGconn* conn) {
+    PGresult* res;
+    res = PQexec(conn, "DROP TABLE update;");
+    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
+        fprintf(stderr, "DROP TABLE failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        return -1;
+    }
+    PQclear(res);
+    return 0;
 }
 
 inline int pqUpdateVersionDate(PGconn* conn, char* version_id, struct tm* date) {

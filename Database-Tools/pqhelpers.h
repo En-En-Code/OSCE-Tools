@@ -54,6 +54,11 @@ extern int      pqInsertVersionEgtb(PGconn* conn, char* version_id, char* egtb_n
 extern PGresult*    pqAllocAllSources(PGconn* conn);
 extern code_link*   pqAllocSourceFromVersion(PGconn* conn, char* version_id);
 
+extern int  pqCreateUpdateTable(PGconn* conn);
+extern int  pqInsertUpdate(PGconn* conn, char* engine_id, char* version_id);
+extern void pqSummarizeUpdateTable(PGconn* conn);
+extern int  pqDropUpdateTable(PGconn* conn);
+
 extern int  pqUpdateVersionDate(PGconn* conn, char* version_id, struct tm* date);
 extern int  pqUpdateVersionNote(PGconn* conn, char* version_id, char* note);
 

@@ -20,6 +20,7 @@ limitations under the License.
 #include <git2.h>
 #include <apr_hash.h>
 #include <svn_types.h>
+#include "globals.h"
 
 // Why revprops couldn't just contain the revision number is beyond me
 typedef struct {
@@ -35,7 +36,7 @@ typedef struct {
 
 extern int      vcsUpdateScan(PGconn* conn);
 extern void*    vcsUpdateScanThread(void* td);
-extern int      vcsUpdateTrunkInfo(PGconn* conn, char* version_id);
+extern int      vcsUpdateTrunkInfo(PGconn* conn, char* version_id, code_link* source);
 
 extern time_t vcsLastTrunkCommitTimeGit(char* uri);
 extern time_t vcsLastTrunkCommitTimeSvn(char* uri, apr_pool_t* pool);

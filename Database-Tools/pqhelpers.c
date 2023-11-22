@@ -593,7 +593,7 @@ PGresult* pqAllocAllSources(PGconn* conn) {
     return res;
 }
 
-code_link* pqAllocSourceFromVersion(PGconn* conn, char* version_id) {
+code_link** pqAllocSourcesFromVersion(PGconn* conn, char* version_id, size_t* dest_elems) {
     const char* paramValues[1] = { version_id };
 
     PGresult* res;
@@ -603,7 +603,7 @@ code_link* pqAllocSourceFromVersion(PGconn* conn, char* version_id) {
                         "JOIN version USING (engine_id) WHERE version_id = $1;",
                         1, NULL, paramValues, NULL, NULL, 0);
     if (PQresultStatus(res) != PGRES_TUPLES_OK) {
-        fprintf(stderr, "INSERT failed: %s", PQerrorMessage(conn));
+        fprintf(stderr, "SELECT failed: %s", PQerrorMessage(conn));
         PQclear(res);
         return NULL;
     }
@@ -613,12 +613,16 @@ code_link* pqAllocSourceFromVersion(PGconn* conn, char* version_id) {
         return NULL;
     }
 
-    code_link* source = errhandMalloc(sizeof(code_link));
-    source->uri = errhandStrdup(PQgetvalue(res, 0, 0));
-    source->vcs = errhandStrdup(PQgetvalue(res, 0, 1));
+    *dest_elems = PQntuples(res);
+    code_link** sources = errhandMalloc(*dest_elems * sizeof(code_link*));
+    for (int i = 0; i < *dest_elems; i++) {
+        sources[i] = errhandMalloc(sizeof(code_link));
+        sources[i]->uri = errhandStrdup(PQgetvalue(res, i, 0));
+        sources[i]->vcs = errhandStrdup(PQgetvalue(res, i, 1));
+    }
     PQclear(res);
 
-    return source;
+    return sources;
 }
 
 // Returns 0 on success of creating the table, and -1 on failure

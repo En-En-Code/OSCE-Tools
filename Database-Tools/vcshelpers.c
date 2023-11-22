@@ -112,8 +112,10 @@ void* vcsUpdateScanThread(void* td) {
                 pqInsertUpdate(conn, PQgetvalue(res, i, 1), PQgetvalue(res, i, 4));
                 sem_post(&conn_lock);
                 update_count += 1;
+                printf("!");
+            } else {
+                printf(".");
             }
-            printf(".");
             fflush(stdout);
         } else if (strncmp(PQgetvalue(res, i, 3), "svn", 3) == 0) {
             apr_pool_t* pool = svn_pool_create(NULL);
@@ -129,8 +131,10 @@ void* vcsUpdateScanThread(void* td) {
                 pqInsertUpdate(conn, PQgetvalue(res, i, 1), PQgetvalue(res, i, 4));
                 sem_post(&conn_lock);
                 update_count += 1;
+                printf("!");
+            } else {
+                printf(".");
             }
-            printf(".");
             fflush(stdout);
 
             svn_pool_destroy(pool);
@@ -155,12 +159,9 @@ void* vcsUpdateScanThread(void* td) {
     return NULL;  //I don't need anything returned really.
 }
 
-int vcsUpdateTrunkInfo(PGconn* conn, char* version_id) {
-    code_link* source = pqAllocSourceFromVersion(conn, version_id);
-    if (source == NULL) {
-        return -1;
-    }
-
+// With the way engines having multiple sources works now, source cannot be NULL.
+// Its allocation and deallocation are now handled by the cli.
+int vcsUpdateTrunkInfo(PGconn* conn, char* version_id, code_link* source) {
     if (strncmp(source->vcs, "git", 3) == 0) {
         git_commit* last_commit = vcsAllocLastTrunkCommitGit(source->uri);
         if (last_commit == NULL) {
@@ -214,8 +215,6 @@ int vcsUpdateTrunkInfo(PGconn* conn, char* version_id) {
         fprintf(stderr, "Sources not using a version control system cannot automatically be updated.\n");
     }
 
-    freeCodeLink(*source);
-    free(source);
     return 0;
 }
 

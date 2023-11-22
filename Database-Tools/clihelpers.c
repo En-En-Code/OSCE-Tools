@@ -195,7 +195,31 @@ void cliVersionLoop(PGconn* conn, char* engine_name, char* version_id, char* ver
                 pqInsertVersionEgtb(conn, version_id, egtb_name);
                 break;
             case 'U':
-                vcsUpdateTrunkInfo(conn, version_id);
+                size_t dest_elems = 0;
+                code_link** sources = pqAllocSourcesFromVersion(conn, version_id, &dest_elems);
+                if (dest_elems == 1) {
+                    vcsUpdateTrunkInfo(conn, version_id, sources[0]);
+                } else if (dest_elems > 1) {
+                    // Multiple sources were found, so asking for disambiguation
+                    int choice = -1;
+                    while (choice <= 0 || choice > dest_elems) {
+                        printf("Multiple sources to use found.\n");
+                        for (int i = 1; i <= dest_elems; i++) {
+                            printf("Opt. %d: %s\n", i, sources[i-1]->uri);
+                        }
+                        printf("Selection: ");
+                        cliReadInput(input, 4096);
+                        choice = atoi(input);
+                    }
+                    vcsUpdateTrunkInfo(conn, version_id, sources[choice-1]);
+                }
+                for (int i = 0; i < dest_elems; i++) {
+                    freeCodeLink(*sources[i]);
+                    free(sources[i]);
+                }
+                if (dest_elems > 0) {
+                    free(sources);
+                }
                 break;
             case 'X':
                 //Intentional no error, since 'X' quits loop.

@@ -24,7 +24,7 @@ limitations under the License.
 #include "vcshelpers.h"
 #include "globals.h"
 
-inline void cliRootLoop(PGconn* conn) {
+void cliRootLoop(PGconn* conn) {
     char* input = (char*)errhandMalloc(4096);
     input[0] = '\0';
     char* engine_name = NULL;
@@ -79,7 +79,7 @@ inline void cliRootLoop(PGconn* conn) {
     free(input);
 }
 
-inline void cliEngineLoop(PGconn* conn, char* engine_name, char* engine_id) {
+void cliEngineLoop(PGconn* conn, char* engine_name, char* engine_id) {
     char* input = (char*)errhandMalloc(4096);
     input[0] = '\0';
     char* parent_engine_name = NULL;
@@ -164,7 +164,7 @@ inline void cliEngineLoop(PGconn* conn, char* engine_name, char* engine_id) {
     free(input);
 }
 
-inline void cliVersionLoop(PGconn* conn, char* engine_name, char* version_id, char* version_name) {
+void cliVersionLoop(PGconn* conn, char* engine_name, char* version_id, char* version_name) {
     char* input = (char*)errhandMalloc(4096);
     input[0] = '\0';
 
@@ -207,7 +207,7 @@ inline void cliVersionLoop(PGconn* conn, char* engine_name, char* version_id, ch
     free(input);
 }
 
-inline void cliListRootCommands() {
+void cliListRootCommands() {
     printf("\nAccepted database commands:\n");
     printf("E        (List all engines)\n");
     printf("N        (Create new engine)\n");
@@ -216,7 +216,7 @@ inline void cliListRootCommands() {
     printf("Q        (Quit)\n");
 }
 
-inline void cliListEngineCommands(char* engine_name) {
+void cliListEngineCommands(char* engine_name) {
     printf("\nWhat would you like to do with %s?\n", engine_name);
     printf("P        (Print info for %s)\n", engine_name);
     printf("A        (Add new authors to %s)\n", engine_name);
@@ -228,7 +228,7 @@ inline void cliListEngineCommands(char* engine_name) {
     printf("X        (Exit to the root menu)\n");
 }
 
-inline void cliListVersionCommands(char* engine_name, char* engine_version) {
+void cliListVersionCommands(char* engine_name, char* engine_version) {
     printf("\nWhat would you like to do with %s %s?\n", engine_name, engine_version);
     printf("P        (Print info for %s %s)\n", engine_name, engine_version);
     printf("O [OS]   (Add operating system [OS] compatible with %s %s)\n", engine_name, engine_version);
@@ -239,7 +239,7 @@ inline void cliListVersionCommands(char* engine_name, char* engine_version) {
 
 // An fgets-stdin wrapper which handles possible fgets errors.
 // Returns the number of bytes before a newline read, which is far more useful than s.
-inline size_t cliReadInput(char* s, int size) {
+size_t cliReadInput(char* s, int size) {
     if (fgets(s, size, stdin) == NULL) {
         fprintf(stderr, "fgets returned a NULLPTR.\n");
         exit(1);
@@ -259,7 +259,7 @@ inline size_t cliReadInput(char* s, int size) {
 
 // Memory is allocated by this function to store the input.
 // Free must be called when finished with the returned value.
-inline char* cliAllocInputString(char* explan, size_t size) {
+char* cliAllocInputString(char* explan, size_t size) {
     char* input = (char*)errhandMalloc(size);
     input[0] = '\0';
 
@@ -274,7 +274,7 @@ inline char* cliAllocInputString(char* explan, size_t size) {
 // Memory is allocated by this function to store nd_strings.
 // Free must be called when finished with the returned value.
 // The format is a string of values, each value separated by a newline.
-inline char* cliAllocNDSeries(char* name, size_t size) {
+char* cliAllocNDSeries(char* name, size_t size) {
     char* nd_strings = NULL;
     size_t total_bytes = 0;
 
@@ -315,7 +315,7 @@ inline char* cliAllocNDSeries(char* name, size_t size) {
 // A helper function, which determines the ID of an engine based on its name.
 // If multiple engines with the same name exist, asks for user to disambiguate.
 // Returns -1 if no engine with the name exists.
-inline int cliObtainEngineIdFromName(PGconn* conn, char* engine_name) {
+int cliObtainEngineIdFromName(PGconn* conn, char* engine_name) {
     int engine_id = -1;
     int* engine_id_list = pqAllocEngineIdsWithName(conn, engine_name);
     if (engine_id_list == NULL || *engine_id_list == 0) {
@@ -353,7 +353,7 @@ inline int cliObtainEngineIdFromName(PGconn* conn, char* engine_name) {
     return engine_id;
 }
 
-inline char* cliObtainVersionIdFromName(PGconn* conn, char* engine_id, char* version_name) {
+char* cliObtainVersionIdFromName(PGconn* conn, char* engine_id, char* version_name) {
     char* version_id = pqAllocVersionIdWithName(conn, engine_id, version_name);
     if (version_id == NULL) {
         fprintf(stderr, "No version %s associated with the engine.\n", version_name);
@@ -365,7 +365,7 @@ inline char* cliObtainVersionIdFromName(PGconn* conn, char* engine_id, char* ver
 // Creates a new code_link struct.
 // This function allocates memory 2 times, so it has a special free
 // function, freeCodeLink, to fre everything when done with the struct.
-inline code_link cliAllocCodeLink() {
+code_link cliAllocCodeLink() {
     code_link codeLink = {0};
     codeLink.uri = cliAllocInputString("Source URI", 4096);
     codeLink.vcs = cliAllocInputString("3-letter version control system abbrievation", 4);
@@ -375,7 +375,7 @@ inline code_link cliAllocCodeLink() {
 // Creates a new version struct.
 // This function allocates memory several times, so it has a special free
 // function, freeVersion, to free everything when done with the struct.
-inline version cliAllocVersion() {
+version cliAllocVersion() {
     version version_data = {0};
     char* buff = (char*)errhandMalloc(4096);
     
@@ -404,6 +404,19 @@ inline version cliAllocVersion() {
         release_date.tm_mday = atoi(buff);
     }
     version_data.releaseDate = release_date;
+
+    while (1) {
+        printf("Is the release a development version? ");
+        cliReadInput(buff, 16);
+        buff[0] = toupper(buff[0]);
+        if (buff[0] == 'Y' || buff[0] == 'T') {
+          version_data.is_dev = 1;
+          break;
+        }
+        if (buff[0] == 'N' || buff[0] == 'F') {
+          break;
+        }
+    }
 
     version_data.programLang = cliAllocInputString("Programming language", 64);
     

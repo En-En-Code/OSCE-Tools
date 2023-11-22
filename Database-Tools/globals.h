@@ -25,6 +25,7 @@ typedef struct {
     char* programLang;
     char* license;
     char protocol; //A bit mask. 1 is xboard compat, 2 is uci copmat.
+    char is_dev; //A pseudo-bool. 1 is for cutting-edge branches, 0 for stable releases.
     char* note;
 } version;
 

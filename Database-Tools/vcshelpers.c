@@ -40,7 +40,7 @@ sem_t idx_lock;
 int scan_idx;
 
 // Returns the number of engines with updates found, or -1 on failure.
-inline int vcsUpdateScan(PGconn* conn) {
+int vcsUpdateScan(PGconn* conn) {
     clock_t start = clock();
     PGresult* res = pqAllocAllSources(conn);
     if (PQresultStatus(res) != PGRES_TUPLES_OK) {
@@ -155,7 +155,7 @@ void* vcsUpdateScanThread(void* td) {
     return NULL;  //I don't need anything returned really.
 }
 
-inline int vcsUpdateTrunkInfo(PGconn* conn, char* version_id) {
+int vcsUpdateTrunkInfo(PGconn* conn, char* version_id) {
     code_link* source = pqAllocSourceFromVersion(conn, version_id);
     if (source == NULL) {
         return -1;
@@ -220,7 +220,7 @@ inline int vcsUpdateTrunkInfo(PGconn* conn, char* version_id) {
 }
 
 // Returns time of last commit, or negative numbers for errors.
-inline time_t vcsLastTrunkCommitTimeGit(char* uri) {
+time_t vcsLastTrunkCommitTimeGit(char* uri) {
     git_commit* last_commit = vcsAllocLastTrunkCommitGit(uri);
     if (last_commit == NULL) {
         return -1;
@@ -232,7 +232,7 @@ inline time_t vcsLastTrunkCommitTimeGit(char* uri) {
     return last_update_time;
 }
 
-inline time_t vcsLastTrunkCommitTimeSvn(char* uri, apr_pool_t* pool) {
+time_t vcsLastTrunkCommitTimeSvn(char* uri, apr_pool_t* pool) {
     svn_commit* last_commit = vcsAllocLastTrunkCommitSvn(uri, pool);
     if (last_commit == NULL) {
         return -1;
@@ -242,7 +242,7 @@ inline time_t vcsLastTrunkCommitTimeSvn(char* uri, apr_pool_t* pool) {
 }
 
 // Returns a pointer to the last git commit made to HEAD in uri. Must be freed.
-inline git_commit* vcsAllocLastTrunkCommitGit(char* uri) {
+git_commit* vcsAllocLastTrunkCommitGit(char* uri) {
     git_repository* repo = NULL;
     const char* url = uri;
 
@@ -297,7 +297,7 @@ inline git_commit* vcsAllocLastTrunkCommitGit(char* uri) {
 }
 
 // Memory is allocated by pool, which must be freed when finished.
-inline svn_commit* vcsAllocLastTrunkCommitSvn(char* uri, apr_pool_t* pool) {
+svn_commit* vcsAllocLastTrunkCommitSvn(char* uri, apr_pool_t* pool) {
     svn_error_t* err;
     const char* url = uri;
 

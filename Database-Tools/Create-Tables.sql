@@ -22,7 +22,7 @@ SET search_path TO engine;
 CREATE SEQUENCE vcs_id_seq AS int;
 CREATE TABLE vcs (
     vcs_id      int PRIMARY KEY DEFAULT nextval('vcs_id_seq'),
-    vcs_name    varchar(64) NOT NULL    -- The name of the version control system
+    vcs_name    varchar(4) NOT NULL    -- The name of the version control system
 );
 ALTER SEQUENCE vcs_id_seq OWNED BY vcs.vcs_id;
 INSERT INTO vcs (vcs_name) VALUES
@@ -36,7 +36,7 @@ INSERT INTO vcs (vcs_name) VALUES
 CREATE SEQUENCE code_lang_id_seq AS int;
 CREATE TABLE code_lang (
     code_lang_id    int PRIMARY KEY DEFAULT nextval('code_lang_id_seq'),
-    code_lang_name  varchar(64) NOT NULL
+    code_lang_name  varchar(32) NOT NULL
 );
 ALTER SEQUENCE code_lang_id_seq OWNED BY code_lang.code_lang_id;
 INSERT INTO code_lang (code_lang_name) VALUES
@@ -110,7 +110,7 @@ INSERT INTO license (license_name) VALUES
 CREATE SEQUENCE os_id_seq AS int;
 CREATE TABLE os (
     os_id   int PRIMARY KEY DEFAULT nextval('os_id_seq'),
-    os_name varchar(64) NOT NULL
+    os_name varchar(16) NOT NULL
 );
 ALTER SEQUENCE os_id_seq OWNED BY os.os_id;
 INSERT INTO os (os_name) VALUES
@@ -123,7 +123,7 @@ INSERT INTO os (os_name) VALUES
 CREATE SEQUENCE egtb_id_seq AS int;
 CREATE TABLE egtb (
     egtb_id     int PRIMARY KEY DEFAULT nextval('egtb_id_seq'),
-    egtb_name   varchar(64) NOT NULL
+    egtb_name   varchar(16) NOT NULL
 );
 ALTER SEQUENCE egtb_id_seq OWNED BY egtb.egtb_id;
 INSERT INTO egtb (egtb_name) VALUES
@@ -150,11 +150,13 @@ CREATE TABLE author (
 ALTER SEQUENCE author_id_seq OWNED BY author.author_id;
 
 -- A table relating engines to their authors.
-CREATE TABLE engine_authorship (
-    engine_id   int REFERENCES engine (engine_id),
-    author_id   int REFERENCES author (author_id),
-    PRIMARY KEY (engine_id, author_id)
+CREATE SEQUENCE engine_author_id_seq AS int;
+CREATE TABLE engine_author (
+    engine_author_id  int PRIMARY KEY DEFAULT nextval('engine_author_id_seq'),
+    engine_id         int REFERENCES engine (engine_id),
+    author_id         int REFERENCES author (author_id)
 );
+ALTER SEQUENCE engine_author_id_seq OWNED BY engine_author.engine_author_id;
 
 -- A table storing information of where on the Internet the sources can be obtained from.
 CREATE SEQUENCE source_id_seq AS int;
@@ -166,31 +168,37 @@ CREATE TABLE source (
 ALTER SEQUENCE source_id_seq OWNED BY source.source_id;
 
 -- A table relating engines to their sources.
-CREATE TABLE source_reference (
-    engine_id   int REFERENCES engine (engine_id),
-    source_id   int REFERENCES source (source_id),
-    PRIMARY KEY (engine_id, source_id)
+CREATE SEQUENCE engine_source_id_seq AS int;
+CREATE TABLE engine_source (
+    engine_source_id  int PRIMARY KEY DEFAULT nextval('engine_source_id_seq'),
+    engine_id         int REFERENCES engine (engine_id),
+    source_id         int REFERENCES source (source_id)
 );
+ALTER SEQUENCE engine_source_id_seq OWNED BY engine_source.engine_source_id;
 
 -- A table relating derivative engines to the engine(s) they originated from.
 -- For example, one table entry could be the engine_id of Stockfish and the
--- parent_engine_id of Glaurung, since Stockfish is a derivative project of Glarung.
+-- origin_engine_id of Glaurung, since Stockfish is a derivative project of Glarung.
+CREATE SEQUENCE predecessor_id_seq AS int;
 CREATE TABLE predecessor (
-    engine_id           int REFERENCES engine (engine_id),
-    parent_engine_id    int REFERENCES engine (engine_id),
-    PRIMARY KEY (engine_id, parent_engine_id)
+    predecessor_id    int PRIMARY KEY DEFAULT nextval('predecessor_id_seq'),
+    engine_id         int REFERENCES engine (engine_id),
+    origin_engine_id  int REFERENCES engine (engine_id)
 );
+ALTER SEQUENCE predecessor_id_seq OWNED BY predecessor.predecessor_id;
 
--- A table relating engines to the engine(s) they toke inspiration from.
--- For example, one table entry could be the engine_id of Berserk and the parent_engine_id
+-- A table relating engines to the engine(s) they took inspiration from.
+-- For example, one table entry could be the engine_id of Berserk and the origin_engine_id
 -- of Ethereal, since ideas from Ethereal are uniquely reimplemented by Berserk.
 -- The line between using the predecessdors and the inspirations table is not always clear-cut.
 -- I tend to use my best judgement and what is contained in the engines README to decide.
+CREATE SEQUENCE inspiration_id_seq AS int;
 CREATE TABLE inspiration (
+    inspiration_id      int PRIMARY KEY DEFAULT nextval('inspiration_id_seq'),
     engine_id           int REFERENCES engine (engine_id),
-    parent_engine_id    int REFERENCES engine (engine_id),
-    PRIMARY KEY (engine_id, parent_engine_id)
+    origin_engine_id    int REFERENCES engine (engine_id)
 );
+ALTER SEQUENCE inspiration_id_seq OWNED BY inspiration.inspiration_id;
 
 -- A table relating engines to all of their versions and their properties.
 -- Kept seperate from engines since there are an unknown amount of versions.
@@ -199,31 +207,36 @@ CREATE TABLE inspiration (
 -- Status of protocol(s) and OS compatability may also change between versions.
 CREATE SEQUENCE version_id_seq AS int;
 CREATE TABLE version (
-    version_id      int PRIMARY KEY DEFAULT nextval('version_id_seq'),
-    engine_id       int REFERENCES engine (engine_id),
-    version_name    varchar(255) NOT NULL,  -- The version number, e.g. 1.0, TCEC_v2, origin/HEAD.
-    release_date    date NOT NULL,          -- Release date/date of last commit (for origin/HEAD).
-    code_lang_id    int REFERENCES code_lang (code_lang_id),
-    license_id      int REFERENCES license (license_id),
-    accepts_xboard  bool NOT NULL,          -- Can the program interface with Xboard?
-    accepts_uci     bool NOT NULL,          -- Can the program interface with UCI?
-    note            text,                   -- Custom documentation/notes.
+    version_id    int PRIMARY KEY DEFAULT nextval('version_id_seq'),
+    engine_id     int REFERENCES engine (engine_id),
+    version_name  varchar(255) NOT NULL,  -- The version number, e.g. 1.0, TCEC_v2, origin/HEAD.
+    release_date  date NOT NULL,          -- Release date/date of last commit (for origin/HEAD).
+    is_dev        bool NOT NULL,          -- Is the version on the cutting-edge branch?
+    code_lang_id  int REFERENCES code_lang (code_lang_id),
+    license_id    int REFERENCES license (license_id),
+    is_xboard     bool NOT NULL,          -- Can the program interface with Xboard?
+    is_uci        bool NOT NULL,          -- Can the program interface with UCI?
+    note          text,                   -- Custom documentation/notes.
     UNIQUE (engine_id, version_name)
 );
 ALTER SEQUENCE version_id_seq OWNED BY version.version_id;
 
 -- A table relating engines to the operating systems they can be built and ran on.
 -- The contents come entirely from my own testing, so Linux will be the main representative.
-CREATE TABLE compatible_os (
-    version_id  int REFERENCES version (version_id),
-    os_id       int REFERENCES os (os_id),
-    PRIMARY KEY (version_id, os_id)
+CREATE SEQUENCE version_os_id_seq AS int;
+CREATE TABLE version_os (
+    version_os_id int PRIMARY KEY DEFAULT nextval('version_os_id_seq'),
+    version_id    int REFERENCES version (version_id),
+    os_id         int REFERENCES os (os_id)
 );
+ALTER SEQUENCE version_os_id_seq OWNED BY version_os.version_os_id;
 
 -- A table relating engine version to the endgame tablebases they are compatible with.
 -- Some engines support multiple EGTB, and many support none at all, so it best fits here.
-CREATE TABLE compatible_egtb (
+CREATE SEQUENCE version_egtb_id_seq AS int;
+CREATE TABLE version_egtb (
+    version_egtb_id int PRIMARY KEY DEFAULT nextval('version_egtb_id_seq'),
     version_id  int REFERENCES version (version_id),
-    egtb_id     int REFERENCES egtb (egtb_id),
-    PRIMARY KEY (version_id, egtb_id)
+    egtb_id     int REFERENCES egtb (egtb_id)
 );
+ALTER SEQUENCE version_egtb_id_seq OWNED BY version_egtb.version_egtb_id;

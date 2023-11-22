@@ -24,7 +24,7 @@ limitations under the License.
 
 // Memory is allocated by this function to store ptr.
 // Free must be called when finished with the returned value.
-inline void* errhandMalloc(size_t size) {
+void* errhandMalloc(size_t size) {
     void* ptr = malloc(size);
     if (ptr == NULL) {
         fprintf(stderr, "Not enough memory to perform allocation.\n");
@@ -35,7 +35,7 @@ inline void* errhandMalloc(size_t size) {
 
 // Memory is allocated by this function to store ptr.
 // Free must be called when finished with the returned value.
-inline void* errhandCalloc(size_t num, size_t size) {
+void* errhandCalloc(size_t num, size_t size) {
     void* ptr = calloc(num, size);
     if (ptr == NULL) {
         fprintf(stderr, "Not enough memory to perform allocation.\n");
@@ -47,7 +47,7 @@ inline void* errhandCalloc(size_t num, size_t size) {
 // Memory is allocated by this function to store new_ptr.
 // Free must be called when finished with the returned value.
 // Note this function can possibly free memory if size = 0.
-inline void* errhandRealloc(void* ptr, size_t size) {
+void* errhandRealloc(void* ptr, size_t size) {
     void* new_ptr = realloc(ptr, size);
     if (new_ptr == NULL) {
         fprintf(stderr, "Not enough memory to perform allocation.\n");
@@ -59,7 +59,7 @@ inline void* errhandRealloc(void* ptr, size_t size) {
 
 // Memory is allocated by this function to store new_s
 // Free must be called when finished with the returned value.
-inline char* errhandStrdup(const char* s) {
+char* errhandStrdup(const char* s) {
     char* new_s = strdup(s);
     if (new_s == NULL) {
         fprintf(stderr, "not enough memory to perform allocation.\n");
@@ -70,20 +70,20 @@ inline char* errhandStrdup(const char* s) {
 }
 
 // Frees a version struct created with previous calls to malloc on each char* element
-inline void freeVersion(version v) {
+void freeVersion(version v) {
     free(v.versionNum);
     free(v.programLang);
     free(v.license);
     free(v.note);
 }
 
-inline void freeCodeLink(code_link cl) {
+void freeCodeLink(code_link cl) {
     free(cl.uri);
     free(cl.vcs);
 }
 
 // converts a char* of the format %Y-%m-%d into a time_t
-inline time_t readDate(const char* date_str) {
+time_t readDate(const char* date_str) {
     const char* date_str_ptr = date_str;
 
     struct tm stored_date = { 0 };
@@ -98,7 +98,7 @@ inline time_t readDate(const char* date_str) {
 
 // A pair of helper functions based on https://stackoverflow.com/a/5467788
 // Deletes a directory and its contents recursively.
-inline int rm_file(const char* fpath, const struct stat* sb, int typeflag, struct FTW* ftwbuf) {
+int rm_file(const char* fpath, const struct stat* sb, int typeflag, struct FTW* ftwbuf) {
     int rv = remove(fpath);
 
     if (rv)
@@ -107,6 +107,6 @@ inline int rm_file(const char* fpath, const struct stat* sb, int typeflag, struc
     return rv;
 }
 
-inline int rm_file_recursive(char* path) {
+int rm_file_recursive(char* path) {
     return nftw(path, rm_file, 64, FTW_DEPTH | FTW_PHYS);
 }

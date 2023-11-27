@@ -20,16 +20,23 @@ limitations under the License.
 #include <time.h>
 
 typedef struct {
+    char* code_id;
+    char type; //A bit mask. 1 for branch, 2 for commit, 4 for revnum, 8 for tag.
+    char* val;
+} revision;
+
+typedef struct {
     char* versionNum;
+    revision rev;
     struct tm releaseDate;
     char* programLang;
     char* license;
     char protocol; //A bit mask. 1 is xboard compat, 2 is uci copmat.
-    char is_dev; //A pseudo-bool. 1 is for cutting-edge branches, 0 for stable releases.
     char* note;
 } version;
 
 typedef struct {
+    char* id;
     char* uri;
     char* vcs;
 } code_link;
@@ -41,6 +48,7 @@ extern char* errhandStrdup(const char* s);
 
 extern void freeVersion(version v);
 extern void freeCodeLink(code_link cl);
+extern void freeRevision(revision r);
 
 extern time_t readDate(const char* date_str);
 

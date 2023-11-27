@@ -46,13 +46,14 @@ extern int  pqInsertNDAuthors(PGconn* conn, char* engine_id, char* authors);
 
 extern int      pqInsertSource(PGconn* conn, char* engine_id, code_link source);
 extern char*    pqInsertVersion(PGconn* conn, char* engine_id, version version_info);
+extern int      pqInsertRevision(PGconn* conn, revision rev_info);
 extern int      pqInsertInspiration(PGconn* conn, char* engine_id, int parent_engine_id);
 extern int      pqInsertPredecessor(PGconn* conn, char* engine_id, int parent_engine_id);
 extern int      pqInsertVersionOs(PGconn* conn, char* version_id, char* os_name);
 extern int      pqInsertVersionEgtb(PGconn* conn, char* version_id, char* egtb_name);
 
 extern PGresult*    pqAllocAllSources(PGconn* conn);
-extern code_link**  pqAllocSourcesFromVersion(PGconn* conn, char* version_id, size_t* dest_elems);
+extern code_link**  pqAllocSourcesFromEngine(PGconn* conn, char* engine_id, size_t* dest_elems);
 
 extern int  pqCreateUpdateTable(PGconn* conn);
 extern int  pqInsertUpdate(PGconn* conn, char* engine_id, char* version_id);

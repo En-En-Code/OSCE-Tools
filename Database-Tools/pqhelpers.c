@@ -224,11 +224,12 @@ void pqListVersions(PGconn* conn, char* engine_id) {
         -- https://www.crunchydata.com/blog/preventing-sql-injection-attacks-in-postgresql
     */
     res = PQexecParams(conn,
-                        "SELECT version_name, is_dev, release_date, code_lang_name, "
-                        "license_name, is_xboard, is_uci, v.note "
-                        "FROM version v JOIN engine USING (engine_id) JOIN license USING (license_id) "
-                        "JOIN code_lang USING (code_lang_id) WHERE v.engine_id = $1 "
-                        "ORDER BY release_date DESC;",
+                        "SELECT version_name, source_uri, frag_type, frag_val, release_date, "
+                        "code_lang_name, license_name, is_xboard, is_uci, v.note "
+                        "FROM version v JOIN source USING (source_id) "
+                        "JOIN revision USING (revision_id) JOIN engine USING (engine_id) "
+                        "JOIN license USING (license_id) JOIN code_lang USING (code_lang_id) "
+                        "WHERE v.engine_id = $1 ORDER BY release_date DESC;",
                         1, NULL, paramValues, NULL, NULL, 0);
     if (PQresultStatus(res) != PGRES_TUPLES_OK) {
         fprintf(stderr, "SELECT failed: %s", PQerrorMessage(conn));
@@ -245,8 +246,9 @@ void pqListVersionDetails(PGconn* conn, char* version_id) {
 
     PGresult* res;
     res = PQexecParams(conn,
-                        "SELECT version_name, is_dev, release_date, code_lang_name, license_name, "
-                        "is_xboard, is_uci, note FROM version "
+                        "SELECT version_name, source_uri, frag_type, frag_val, release_date, "
+                        "code_lang_name, license_name, is_xboard, is_uci, note FROM version "
+                        "JOIN revision USING (revision_id) JOIN source USING (source_id) "
                         "JOIN license USING (license_id) JOIN code_lang USING (code_lang_id) "
                         "WHERE version_id = $1 ORDER BY release_date DESC;",
                         1, NULL, paramValues, NULL, NULL, 0);
@@ -480,39 +482,47 @@ char* pqInsertVersion(PGconn* conn, char* engine_id, version version_info) {
     strftime(tmtodate, 40, "%Y-%m-%d", &version_info.releaseDate);
     
     const char* code_lang_literals[3] = {NULL, "code_lang", "code_lang_name"};
-    int code_link_id = pqGetElementId(conn, version_info.programLang, code_lang_literals, 0);
-    if (code_link_id == -1) {
+    int code_lang_id = pqGetElementId(conn, version_info.programLang, code_lang_literals, 0);
+    if (code_lang_id == -1) {
         fprintf(stderr, "%s was not in the table and is not automatically inserted.\n", version_info.programLang);
         return NULL;
     }
-    char code_link_id_str[25];
-    snprintf(code_link_id_str, 25, "%d", code_link_id);
+    char code_lang_id_str[25];
+    snprintf(code_lang_id_str, 25, "%d", code_lang_id);
     
     const char* license_literals[3] = {NULL, "license", "license_name"};
     int license_id = pqGetElementId(conn, version_info.license, license_literals, 0);
-    if (code_link_id == -1) {
+    if (license_id == -1) {
         fprintf(stderr, "%s was not in the table and is not automatically inserted.\n", version_info.license);
         return NULL;
     }
     char license_id_str[25];
     snprintf(license_id_str, 25, "%d", license_id);
     
+    int revision_id = pqInsertRevision(conn, version_info.rev);
+    if (revision_id == -1) {
+        fprintf(stderr, "Revision data was not provided with the version.\n");
+        return NULL;
+    }
+    char revision_id_str[25];
+    snprintf(revision_id_str, 25, "%d", revision_id);
+
     const char* paramValues[9] = {
         engine_id,
         version_info.versionNum,
+        revision_id_str,
         tmtodate,
-        code_link_id_str,
+        code_lang_id_str,
         license_id_str,
         (version_info.protocol & 1) ? "TRUE" : "FALSE",
         (version_info.protocol & 2) ? "TRUE" : "FALSE",
-        (version_info.is_dev & 1) ? "TRUE" : "FALSE",
         version_info.note
     };
     
     PGresult* res;
     res = PQexecParams(conn,
-                        "INSERT INTO version (engine_id, version_name, release_date, "
-                        "code_lang_id, license_id, is_xboard, is_uci, is_dev, note) "
+                        "INSERT INTO version (engine_id, version_name, revision_id, "
+                        "release_date, code_lang_id, license_id, is_xboard, is_uci, note) "
                         "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING version_id;",
                         9, NULL, paramValues, NULL, NULL, 0);
     if (PQresultStatus(res) != PGRES_TUPLES_OK) {
@@ -522,6 +532,31 @@ char* pqInsertVersion(PGconn* conn, char* engine_id, version version_info) {
     }
     char* ret = errhandStrdup(PQgetvalue(res, 0, 0));
 
+    PQclear(res);
+    return ret;
+}
+
+int pqInsertRevision(PGconn* conn, revision rev_info) {
+    const char* paramValues[3] = {
+        rev_info.code_id,
+        (rev_info.type == 1) ? "branch" :
+        (rev_info.type == 2) ? "commit" :
+        (rev_info.type == 4) ? "revnum" : "tag",
+        rev_info.val
+    };
+    
+    PGresult* res;
+    res = PQexecParams(conn,
+                        "INSERT INTO revision (source_id, frag_type, frag_val)"
+                        "VALUES ($1, $2, $3) RETURNING revision_id;",
+                        3, NULL, paramValues, NULL, NULL, 0);
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+        fprintf(stderr, "INSERT failed: %s\n", PQerrorMessage(conn));
+        PQclear(res);
+        return -1;
+    }
+    int ret = atoi(PQgetvalue(res, 0, 0));
+    
     PQclear(res);
     return ret;
 }
@@ -593,23 +628,25 @@ PGresult* pqAllocAllSources(PGconn* conn) {
     return res;
 }
 
-code_link** pqAllocSourcesFromVersion(PGconn* conn, char* version_id, size_t* dest_elems) {
-    const char* paramValues[1] = { version_id };
+code_link** pqAllocSourcesFromEngine(PGconn* conn, char* engine_id, size_t* dest_elems) {
+    const char* paramValues[1] = { engine_id };
 
     PGresult* res;
     res = PQexecParams(conn,
-                        "SELECT source_uri, vcs_name FROM source "
+                        "SELECT source_id, source_uri, vcs_name FROM source "
                         "JOIN vcs USING (vcs_id) JOIN engine_source USING (source_id) "
-                        "JOIN version USING (engine_id) WHERE version_id = $1;",
+                        "WHERE engine_id = $1;",
                         1, NULL, paramValues, NULL, NULL, 0);
     if (PQresultStatus(res) != PGRES_TUPLES_OK) {
         fprintf(stderr, "SELECT failed: %s", PQerrorMessage(conn));
         PQclear(res);
+        dest_elems = 0;
         return NULL;
     }
     if (!PQntuples(res)) {
-        fprintf(stderr, "No source links were found for this engine");
+        fprintf(stderr, "No source links were found for this engine.\n");
         PQclear(res);
+        dest_elems = 0;
         return NULL;
     }
 
@@ -617,8 +654,9 @@ code_link** pqAllocSourcesFromVersion(PGconn* conn, char* version_id, size_t* de
     code_link** sources = errhandMalloc(*dest_elems * sizeof(code_link*));
     for (int i = 0; i < *dest_elems; i++) {
         sources[i] = errhandMalloc(sizeof(code_link));
-        sources[i]->uri = errhandStrdup(PQgetvalue(res, i, 0));
-        sources[i]->vcs = errhandStrdup(PQgetvalue(res, i, 1));
+        sources[i]->id = errhandStrdup(PQgetvalue(res, i, 0));
+        sources[i]->uri = errhandStrdup(PQgetvalue(res, i, 1));
+        sources[i]->vcs = errhandStrdup(PQgetvalue(res, i, 2));
     }
     PQclear(res);
 

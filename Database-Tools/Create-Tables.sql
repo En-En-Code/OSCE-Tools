@@ -137,7 +137,8 @@ CREATE SEQUENCE engine_id_seq AS int;
 CREATE TABLE engine (
     engine_id   int PRIMARY KEY DEFAULT nextval('engine_id_seq'),
     engine_name varchar(255) NOT NULL,  -- Engine name, often, though not guaranteed, unique.
-    note        text                    -- Notes which applies to every version of an engine.
+    note        text,                   -- Notes which applies to every version of an engine.
+    readme      text                    -- A more thorough documentation of the engine.
 );
 ALTER SEQUENCE engine_id_seq OWNED BY engine.engine_id;
 
@@ -166,6 +167,27 @@ CREATE TABLE source (
     vcs_id      int REFERENCES vcs (vcs_id)
 );
 ALTER SEQUENCE source_id_seq OWNED BY source.source_id;
+
+-- A table storing engine logos and their associated engines.
+-- Modifying this is done with external tools.
+CREATE SEQUENCE logo_id_seq AS int;
+CREATE TABLE logo (
+    logo_id   int PRIMARY KEY DEFAULT nextval('logo_id_seq'),
+    engine_id int REFERENCES engine (engine_id),
+    logo_img  bytea DEFAULT NULL
+);
+ALTER SEQUENCE logo_id_seq OWNED BY logo.logo_id;
+
+-- A table containing specific VCS context for a particular version
+CREATE TYPE fragment AS ENUM ('branch', 'commit', 'revnum', 'tag');
+CREATE SEQUENCE revision_id_seq AS int;
+CREATE TABLE revision (
+    revision_id int PRIMARY KEY DEFAULT nextval('revision_id_seq'),
+    source_id   int REFERENCES source (source_id),
+    frag_type   fragment NOT NULL,
+    frag_val    varchar(256) -- Allowed to be NULL, representing the trunk branch.
+);
+ALTER SEQUENCE revision_id_seq OWNED BY revision.revision_id;
 
 -- A table relating engines to their sources.
 CREATE SEQUENCE engine_source_id_seq AS int;
@@ -210,13 +232,14 @@ CREATE TABLE version (
     version_id    int PRIMARY KEY DEFAULT nextval('version_id_seq'),
     engine_id     int REFERENCES engine (engine_id),
     version_name  varchar(255) NOT NULL,  -- The version number, e.g. 1.0, TCEC_v2, origin/HEAD.
+    revision_id   int REFERENCES revision (revision_id),
     release_date  date NOT NULL,          -- Release date/date of last commit (for origin/HEAD).
-    is_dev        bool NOT NULL,          -- Is the version on the cutting-edge branch?
     code_lang_id  int REFERENCES code_lang (code_lang_id),
     license_id    int REFERENCES license (license_id),
     is_xboard     bool NOT NULL,          -- Can the program interface with Xboard?
     is_uci        bool NOT NULL,          -- Can the program interface with UCI?
     note          text,                   -- Custom documentation/notes.
+    pkgbuild      text                    -- A file which can build the engine from source.
     UNIQUE (engine_id, version_name)
 );
 ALTER SEQUENCE version_id_seq OWNED BY version.version_id;

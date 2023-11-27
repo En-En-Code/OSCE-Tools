@@ -71,6 +71,7 @@ char* errhandStrdup(const char* s) {
 
 // Frees a version struct created with previous calls to malloc on each char* element
 void freeVersion(version v) {
+    freeRevision(v.rev);
     free(v.versionNum);
     free(v.programLang);
     free(v.license);
@@ -78,8 +79,14 @@ void freeVersion(version v) {
 }
 
 void freeCodeLink(code_link cl) {
+    free(cl.id);
     free(cl.uri);
     free(cl.vcs);
+}
+
+void freeRevision(revision r) {
+    free(r.code_id);
+    free(r.val);
 }
 
 // converts a char* of the format %Y-%m-%d into a time_t

@@ -109,10 +109,14 @@ void cliEngineLoop(PGconn* conn, char* engine_name, char* engine_id) {
                 freeCodeLink(source);
                 break;
             case 'N':
-                version version_info = cliAllocVersion();
+                version version_info = cliAllocVersion(conn, engine_id);
+                if (version_info.versionNum == NULL) {
+                    fprintf(stderr, "Version was not allocated successfully.\n");
+                    break;
+                }
                 version_id = pqInsertVersion(conn, engine_id, version_info);
                 if (version_id != NULL) {
-                    cliVersionLoop(conn, engine_name, version_id, version_info.versionNum);
+                    cliVersionLoop(conn, engine_id, engine_name, version_id, version_info.versionNum);
                     free(version_id);
                 }
                 freeVersion(version_info);
@@ -120,7 +124,7 @@ void cliEngineLoop(PGconn* conn, char* engine_name, char* engine_id) {
             case 'I':
                 parent_engine_name = strchr(input, ' ');
                 if (parent_engine_name == NULL) {
-                    fprintf(stderr, "Name of engine exepcted.\n");
+                    fprintf(stderr, "Name of engine expected.\n");
                     break;
                 }
                 parent_engine_name += 1; // Move to the index after the space.
@@ -150,7 +154,7 @@ void cliEngineLoop(PGconn* conn, char* engine_name, char* engine_id) {
                 version_name += 1; // Move to the index after the space.
                 version_id = cliObtainVersionIdFromName(conn, engine_id, version_name);
                 if (version_id != NULL) {
-                    cliVersionLoop(conn, engine_name, version_id, version_name);
+                    cliVersionLoop(conn, engine_id, engine_name, version_id, version_name);
                     free(version_id);
                 }
                 break;
@@ -164,7 +168,7 @@ void cliEngineLoop(PGconn* conn, char* engine_name, char* engine_id) {
     free(input);
 }
 
-void cliVersionLoop(PGconn* conn, char* engine_name, char* version_id, char* version_name) {
+void cliVersionLoop(PGconn* conn, char* engine_id, char* engine_name, char* version_id, char* version_name) {
     char* input = (char*)errhandMalloc(4096);
     input[0] = '\0';
 
@@ -196,7 +200,7 @@ void cliVersionLoop(PGconn* conn, char* engine_name, char* version_id, char* ver
                 break;
             case 'U':
                 size_t dest_elems = 0;
-                code_link** sources = pqAllocSourcesFromVersion(conn, version_id, &dest_elems);
+                code_link** sources = pqAllocSourcesFromEngine(conn, engine_id, &dest_elems);
                 if (dest_elems == 1) {
                     vcsUpdateTrunkInfo(conn, version_id, sources[0]);
                 } else if (dest_elems > 1) {
@@ -388,7 +392,7 @@ char* cliObtainVersionIdFromName(PGconn* conn, char* engine_id, char* version_na
 
 // Creates a new code_link struct.
 // This function allocates memory 2 times, so it has a special free
-// function, freeCodeLink, to fre everything when done with the struct.
+// function, freeCodeLink, to free everything when done with the struct.
 code_link cliAllocCodeLink() {
     code_link codeLink = {0};
     codeLink.uri = cliAllocInputString("Source URI", 4096);
@@ -399,10 +403,76 @@ code_link cliAllocCodeLink() {
 // Creates a new version struct.
 // This function allocates memory several times, so it has a special free
 // function, freeVersion, to free everything when done with the struct.
-version cliAllocVersion() {
+version cliAllocVersion(PGconn* conn, char* engine_id) {
     version version_data = {0};
     char* buff = (char*)errhandMalloc(4096);
     
+    size_t dest_elems = 0;
+    code_link** sources = pqAllocSourcesFromEngine(conn, engine_id, &dest_elems);
+    int choice = -1;
+    if (dest_elems < 1) {
+        // If no source exists for the engine, then creating a version is not allowed
+        fprintf(stderr, "Creating a version cannot be done without a source.\n");
+        free(buff);
+        //sources does not need to be freed because it was never mallocked
+        return version_data;
+    } else if (dest_elems == 1) {
+        printf("One source, %s, found. Proceeding with this source.\n", sources[0]->uri);
+        choice = 1;
+    } else {
+        //Select a source between the available ones for this engine.
+        printf("Multiple sources to use found.\n");
+        for (int i = 1; i <= dest_elems; i++) {
+            printf("Opt. %d: %s\n", i, sources[i-1]->uri);
+        }
+        while (choice <= 0 || choice > dest_elems) {
+            printf("Select a source using its option number: ");
+            cliReadInput(buff, 4096);
+            choice = atoi(buff);
+        }
+    }
+    
+    revision rev = { 0 };
+    rev.code_id = errhandStrdup(sources[choice-1]->id);
+    do {
+        printf("Select the identifier type of branch, commit, revision number, or tag (B/C/R/T): ");
+        cliReadInput(buff, 4096);
+        buff[0] = toupper(buff[0]);
+    } while (buff[0] != 'B' && buff[0] != 'C' && buff[0] != 'R' && buff[0] != 'T');
+    
+    if (buff[0] == 'B') {
+        printf("Name of branch to watch (if blank, defaults to the repo's trunk): ");
+        cliReadInput(buff, 4096);
+        //TODO: Remove excess whitespace
+        rev.type = 1;
+        if (buff[0] != '\0') {
+            rev.val = errhandStrdup(buff);
+        } else {
+            rev.val = NULL;
+        }
+    } else if (buff[0] == 'C') {
+        printf("Commit hash: ");
+        cliReadInput(buff, 4096);
+        //TODO: Perform verification for this to be a hash.
+        rev.type = 2;
+        rev.val = errhandStrdup(buff);
+    } else if (buff[0] == 'R') {
+        do {
+            printf("Revision number: ");
+            cliReadInput(buff, 4096);
+        } while (atoi(buff) <= 0);
+        rev.type = 4;
+        rev.val = errhandStrdup(buff);
+    } else {
+        do {
+            printf("Name of tag (cannot be empty): ");
+            cliReadInput(buff, 4096);
+        } while (buff[0] == '\0');
+        rev.type = 8;
+        rev.val = errhandStrdup(buff);
+    }
+    version_data.rev = rev;
+
     version_data.versionNum = cliAllocInputString("Version identifier", 256);
     
     struct tm release_date = { .tm_year = -1, .tm_mon = -1, .tm_mday = -1 };
@@ -429,19 +499,6 @@ version cliAllocVersion() {
     }
     version_data.releaseDate = release_date;
 
-    while (1) {
-        printf("Is the release a development version? ");
-        cliReadInput(buff, 16);
-        buff[0] = toupper(buff[0]);
-        if (buff[0] == 'Y' || buff[0] == 'T') {
-          version_data.is_dev = 1;
-          break;
-        }
-        if (buff[0] == 'N' || buff[0] == 'F') {
-          break;
-        }
-    }
-
     version_data.programLang = cliAllocInputString("Programming language", 64);
     
     const char* protocols[2] = { "Xboard", "UCI" };
@@ -461,10 +518,16 @@ version cliAllocVersion() {
     }
     
     version_data.license = cliAllocInputString("License", 64);
-
+    
     printf("Other notes about this version: ");
     cliReadInput(buff, 4096);
-    version_data.note = buff;
+    version_data.note = errhandStrdup(buff);
 
+    free(buff);
+    for (int i = 0; i < dest_elems; i++) {
+        freeCodeLink(*sources[i]);
+        free(sources[i]);
+    }
+    free(sources);
     return version_data;
 }

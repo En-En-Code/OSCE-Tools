@@ -42,13 +42,14 @@ int scan_idx;
 // Returns the number of engines with updates found, or -1 on failure.
 int vcsUpdateScan(PGconn* conn) {
     clock_t start = clock();
-    PGresult* res = pqAllocAllSources(conn);
+    PGresult* res = pqAllocAllBranchRevisions(conn);
     if (PQresultStatus(res) != PGRES_TUPLES_OK) {
         fprintf(stderr, "SELECT failed: %s\n", PQerrorMessage(conn));
         PQclear(res);
         return -1;
     }
     if (pqCreateUpdateTable(conn) == -1) {
+        PQclear(res);
         return -1;
     }
 
@@ -99,55 +100,23 @@ void* vcsUpdateScanThread(void* td) {
     sem_post(&idx_lock);
     while (i < tuples) {
         // Read vcs_name to decide what to do.
-        if (strncmp(PQgetvalue(res, i, 3), "git", 3) == 0) {
-            time_t commit_time = vcsLastTrunkCommitTimeGit(PQgetvalue(res, i, 2));
-            sem_wait(&conn_lock);
-            char* stored_date_str = pqAllocLatestVersionDate(conn, PQgetvalue(res, i, 1));
-            sem_post(&conn_lock);
-            time_t stored_time = readDate(stored_date_str);
-            free(stored_date_str);
-
-            if (commit_time > stored_time) {
-                sem_wait(&conn_lock);
-                pqInsertUpdate(conn, PQgetvalue(res, i, 1), PQgetvalue(res, i, 4));
-                sem_post(&conn_lock);
-                update_count += 1;
-                printf("!");
-            } else {
-                printf(".");
-            }
-            fflush(stdout);
-        } else if (strncmp(PQgetvalue(res, i, 3), "svn", 3) == 0) {
+        char* vcs_name = PQgetvalue(res, i, 4);
+        if (strncmp(vcs_name, "git", 3) == 0) {
+            time_t commit_time = vcsScanRevisionCommitTime(res, i, 1, NULL);
+            update_count += vcsScanDateHelper(conn, res, i, commit_time);
+        } else if (strncmp(vcs_name, "svn", 3) == 0) {
             apr_pool_t* pool = svn_pool_create(NULL);
-            time_t commit_time = vcsLastTrunkCommitTimeSvn(PQgetvalue(res, i, 2), pool);
-            sem_wait(&conn_lock);
-            char* stored_date_str = pqAllocLatestVersionDate(conn, PQgetvalue(res, i, 1));
-            sem_post(&conn_lock);
-            time_t stored_time = readDate(stored_date_str);
-            free(stored_date_str);
-
-            if (commit_time > stored_time) {
-                sem_wait(&conn_lock);
-                pqInsertUpdate(conn, PQgetvalue(res, i, 1), PQgetvalue(res, i, 4));
-                sem_post(&conn_lock);
-                update_count += 1;
-                printf("!");
-            } else {
-                printf(".");
-            }
-            fflush(stdout);
-
+            time_t commit_time = vcsScanRevisionCommitTime(res, i, 1, pool);
+            update_count += vcsScanDateHelper(conn, res, i, commit_time);
             svn_pool_destroy(pool);
-        } else if (strncmp(PQgetvalue(res, i, 3), "cvs", 3) == 0) {
-            // TODO
-        } else if (strncmp(PQgetvalue(res, i, 3), "n/a", 3) == 0) {
+        } else if (strncmp(vcs_name, "n/a", 3) == 0) {
             sem_wait(&conn_lock);
-            pqInsertUpdate(conn, PQgetvalue(res, i, 1), PQgetvalue(res, i, 4));
+            pqInsertUpdate(conn, PQgetvalue(res, i, 0));
             sem_post(&conn_lock);
             fflush(stdout);
-        } else if (strncmp(PQgetvalue(res, i, 3), "rhv", 3) != 0) {
+        } else if (strncmp(vcs_name, "rhv", 3) != 0) {
             // I choose (for the moment), to not be informed about engines residing in archives.
-            fprintf(stderr, "Unrecognized vcs %s for %s\n", PQgetvalue(res, i, 2), PQgetvalue(res, i, 0));
+            fprintf(stderr, "Unexpected vcs %s of %s\n", vcs_name, PQgetvalue(res, i, 1));
             fflush(stderr);
         }
         sem_wait(&idx_lock);
@@ -159,21 +128,49 @@ void* vcsUpdateScanThread(void* td) {
     return NULL;  //I don't need anything returned really.
 }
 
+// A helper function to offload performing the date comparison in the update scan.
+// Returns 1 if the date pulled is later than the date in the database, 0 otherwise.
+int vcsScanDateHelper(PGconn* conn, PGresult* res, int idx, time_t commit_time) {
+    int ret = 0;
+    sem_wait(&conn_lock);
+    char* stored_date_str = pqAllocLatestVersionDate(conn, PQgetvalue(res, idx, 5));
+    sem_post(&conn_lock);
+    time_t stored_time = readDate(stored_date_str);
+    free(stored_date_str);
+
+    if (commit_time > stored_time) {
+        sem_wait(&conn_lock);
+        pqInsertUpdate(conn, PQgetvalue(res, idx, 0));
+        sem_post(&conn_lock);
+        ret = 1;
+        printf("!");
+    } else {
+        printf(".");
+    }
+    fflush(stdout);
+    return ret;
+}
+
 // With the way engines having multiple sources works now, source cannot be NULL.
 // Its allocation and deallocation are now handled by the cli.
-int vcsUpdateTrunkInfo(PGconn* conn, char* version_id, code_link* source) {
+int vcsUpdateRevisionInfo(PGconn* conn, char* version_id, code_link* source) {
     if (strncmp(source->vcs, "git", 3) == 0) {
-        git_commit* last_commit = vcsAllocLastTrunkCommitGit(source->uri);
-        if (last_commit == NULL) {
-            freeCodeLink(*source);
-            free(source);
+        revision* rev = pqAllocRevisionFromVersion(conn, version_id);
+        if (rev == NULL) {
+            fprintf(stderr, "Revision info could not be obtained from the version info.\n");
+            return -1;
+        }
+        git_commit* commit = vcsAllocRevisionCommitGit(rev, source->uri);
+        freeRevision(*rev);
+        free(rev);
+        if (commit == NULL) {
             return -1;
         }
 
-        time_t commit_time = git_commit_time(last_commit);
+        time_t commit_time = git_commit_time(commit);
 
-        const char* commit_summary = git_commit_summary(last_commit);
-        const git_oid* hash = git_commit_id(last_commit);
+        const char* commit_summary = git_commit_summary(commit);
+        const git_oid* hash = git_commit_id(commit);
         char* note = errhandMalloc(strlen(commit_summary) + HASH_RECORD_LENGTH + 4);
         sprintf(note, "[");
         // git_oid_nfmt could technically fail, but surely it won't :Clueless:
@@ -184,33 +181,39 @@ int vcsUpdateTrunkInfo(PGconn* conn, char* version_id, code_link* source) {
         pqUpdateVersionNote(conn, version_id, note);
 
         free(note);
-        git_commit_free(last_commit);
+        git_commit_free(commit);
     } else if (strncmp(source->vcs, "svn", 3) == 0) {
         apr_pool_t* pool = svn_pool_create(NULL);
-        svn_commit* last_commit = vcsAllocLastTrunkCommitSvn(source->uri, pool);
-        if (last_commit == NULL) {
+        revision* rev = pqAllocRevisionFromVersion(conn, version_id);
+        if (rev == NULL) {
+            fprintf(stderr, "Revision info could not be obtained from the version info.\n");
+            svn_pool_destroy(pool);
+            return -1;
+        }
+        svn_commit* commit = vcsAllocRevisionCommitSvn(rev, source->uri, pool);
+        freeRevision(*rev);
+        free(rev);
+        if (commit == NULL) {
             svn_pool_destroy(pool);
             freeCodeLink(*source);
             free(source);
             return -1;
         }
 
-        time_t commit_date = readDate(svn_prop_get_value(last_commit->revprops, SVN_PROP_REVISION_DATE));
+        time_t commit_date = readDate(svn_prop_get_value(commit->revprops, SVN_PROP_REVISION_DATE));
 
-        const char* commit_summary = svn_prop_get_value(last_commit->revprops, SVN_PROP_REVISION_LOG);
+        const char* commit_summary = svn_prop_get_value(commit->revprops, SVN_PROP_REVISION_LOG);
         if (commit_summary == NULL) {
             commit_summary = "";
         }
-        char* note = errhandMalloc(strcspn(commit_summary, "\n") + floor(log10(last_commit->rev_num) + 1) + 5);
-        sprintf(note, "[r%ld] %.*s", last_commit->rev_num, (int)strcspn(commit_summary, "\n"), commit_summary);
+        char* note = errhandMalloc(strcspn(commit_summary, "\n") + floor(log10(commit->rev_num) + 1) + 5);
+        sprintf(note, "[r%ld] %.*s", commit->rev_num, (int)strcspn(commit_summary, "\n"), commit_summary);
 
         pqUpdateVersionDate(conn, version_id, gmtime(&commit_date));
         pqUpdateVersionNote(conn, version_id, note);
         
         free(note);
         svn_pool_destroy(pool);
-    } else if (strncmp(source->vcs, "cvs", 3) == 0) {
-        //TODO
     } else {
         fprintf(stderr, "Sources not using a version control system cannot automatically be updated.\n");
     }
@@ -218,33 +221,58 @@ int vcsUpdateTrunkInfo(PGconn* conn, char* version_id, code_link* source) {
     return 0;
 }
 
-// Returns time of last commit, or negative numbers for errors.
-time_t vcsLastTrunkCommitTimeGit(char* uri) {
-    git_commit* last_commit = vcsAllocLastTrunkCommitGit(uri);
-    if (last_commit == NULL) {
-        return -1;
+time_t vcsScanRevisionCommitTime(PGresult* res, int idx, char vcs, apr_pool_t* pool) {
+    revision rev = { 0 };
+    rev.code_id = errhandStrdup(PQgetvalue(res, idx, 6));
+    char* frag_str = PQgetvalue(res, idx, 2);
+    rev.type = (strncmp(frag_str, "branch", 6) == 0) ? 1 :
+                    (strncmp(frag_str, "commit", 6) == 0) ? 2 :
+                    (strncmp(frag_str, "revnum", 6) == 0) ? 4 : 8;
+    if (PQgetisnull(res, idx, 3)) {
+        rev.val = NULL;
+    } else {
+        rev.val = errhandStrdup(PQgetvalue(res, idx, 3));
     }
 
-    time_t last_update_time = git_commit_time(last_commit);
-    git_commit_free(last_commit);
+    time_t commit_time = 0;
+    if (vcs == 1) {
+        char* uri = errhandStrdup(PQgetvalue(res, idx, 1));
+        commit_time = vcsRevisionCommitTimeGit(&rev, uri);
+        free(uri);
+    } else if (vcs == 2) {
+        char* uri = errhandStrdup(PQgetvalue(res, idx, 1));
+        commit_time = vcsRevisionCommitTimeSvn(&rev, uri, pool);
+        free(uri);
+    }
+    freeRevision(rev);
 
-    return last_update_time;
+    return commit_time;
 }
 
-time_t vcsLastTrunkCommitTimeSvn(char* uri, apr_pool_t* pool) {
-    svn_commit* last_commit = vcsAllocLastTrunkCommitSvn(uri, pool);
-    if (last_commit == NULL) {
+// Returns time of last commit, or negative numbers for errors.
+time_t vcsRevisionCommitTimeGit(revision* rev, char* uri) {
+    git_commit* commit = vcsAllocRevisionCommitGit(rev, uri);
+    if (commit == NULL) {
         return -1;
     }
 
-    return readDate(svn_prop_get_value(last_commit->revprops, SVN_PROP_REVISION_DATE));
+    time_t update_time = git_commit_time(commit);
+    git_commit_free(commit);
+
+    return update_time;
+}
+
+time_t vcsRevisionCommitTimeSvn(revision* rev, char* uri, apr_pool_t* pool) {
+    svn_commit* commit = vcsAllocRevisionCommitSvn(rev, uri, pool);
+    if (commit == NULL) {
+        return -1;
+    }
+
+    return readDate(svn_prop_get_value(commit->revprops, SVN_PROP_REVISION_DATE));
 }
 
 // Returns a pointer to the last git commit made to HEAD in uri. Must be freed.
-git_commit* vcsAllocLastTrunkCommitGit(char* uri) {
-    git_repository* repo = NULL;
-    const char* url = uri;
-
+git_commit* vcsAllocRevisionCommitGit(revision* rev, char* uri) {
     size_t size = 256;
     char* path = errhandMalloc(size);
     while (getcwd(path, size-12) == NULL) {
@@ -255,36 +283,77 @@ git_commit* vcsAllocLastTrunkCommitGit(char* uri) {
     path = mkdtemp(path);
     if (path == NULL) {
         fprintf(stderr, "Temporary filepath not created sucessfully.\n");
+        return NULL;
     }
 
     git_clone_options clone_opts = GIT_CLONE_OPTIONS_INIT;
+    git_repository* repo = NULL;
+    const char* url = uri;
+    char frag_type = rev->type;
+    if (frag_type == 4) {
+        fprintf(stderr, "Revision number is not a valid identifier in Git.\n");
+        return NULL;
+    }
+
     clone_opts.checkout_opts.checkout_strategy = GIT_CHECKOUT_NONE;
     // Shallow cloning!! :D
-    // Use cutting-edge libgit2 as (https://github.com/libgit2/libgit2/pull/6557)
-    // is not within an official release yet.
+    // Use cutting-edge libgit2 (https://github.com/libgit2/libgit2/pull/6557)
     // This, on my then-current database of ~50 engines, reduced the CPU time of
     // vcsUpdateScan from 42.094 s to 11.276 s !
+    // Caveat: This may not work for commit hash-based checks. Will test.
     clone_opts.fetch_opts.depth = 1;
+    if (frag_type == 8) {
+        clone_opts.fetch_opts.download_tags = GIT_REMOTE_DOWNLOAD_TAGS_ALL;
+    } else {
+        clone_opts.fetch_opts.download_tags = GIT_REMOTE_DOWNLOAD_TAGS_NONE;
+    }
+
     int err = git_clone(&repo, url, path, &clone_opts);
     if (err < 0) {
         const git_error* e = git_error_last();
         fprintf(stderr, "Error %d/%d: %s\n", err, e->klass, e->message);
+        rm_file_recursive(path);
+        free(path);
         return NULL;
     }
 
     git_oid oid;
-    err = git_reference_name_to_id(&oid, repo, "HEAD");
+    if (frag_type == 1) {
+        if (rev->val) {
+            char* template = errhandStrdup("refs/remotes/origin/");
+            template = errhandRealloc(template, 21 + strlen(rev->val));
+            strcat(template, rev->val);
+            err = git_reference_name_to_id(&oid, repo, template);
+            free(template);
+        } else {
+            err = git_reference_name_to_id(&oid, repo, "HEAD");
+        }
+    } else if (frag_type == 2) {
+        err = git_oid_fromstr(&oid, rev->val);
+    } else {
+        char* template = errhandStrdup("refs/tags/");
+        template = errhandRealloc(template, 11 + strlen(rev->val));
+        strcat(template, rev->val);
+        err = git_reference_name_to_id(&oid, repo, template);
+        free(template);
+    }
     if (err < 0) {
         const git_error* e = git_error_last();
         fprintf(stderr, "Error %d/%d: %s", err, e->klass, e->message);
+        git_repository_free(repo);
+        rm_file_recursive(path);
+        free(path);
         return NULL;
     }
 
-    git_commit* last_commit = NULL;
-    err = git_commit_lookup(&last_commit, repo, &oid);
+    git_commit* commit = NULL;
+    err = git_commit_lookup(&commit, repo, &oid);
     if (err < 0) {
         const git_error* e = git_error_last();
         fprintf(stderr, "Error %d/%d: %s", err, e->klass, e->message);
+        git_repository_free(repo);
+        rm_file_recursive(path);
+        free(path);
         return NULL;
     }
 
@@ -292,11 +361,11 @@ git_commit* vcsAllocLastTrunkCommitGit(char* uri) {
     rm_file_recursive(path);
     free(path);
 
-    return last_commit;
+    return commit;
 }
 
 // Memory is allocated by pool, which must be freed when finished.
-svn_commit* vcsAllocLastTrunkCommitSvn(char* uri, apr_pool_t* pool) {
+svn_commit* vcsAllocRevisionCommitSvn(revision* rev, char* uri, apr_pool_t* pool) {
     svn_error_t* err;
     const char* url = uri;
 
@@ -318,15 +387,16 @@ svn_commit* vcsAllocLastTrunkCommitSvn(char* uri, apr_pool_t* pool) {
         return NULL;
     }
 
-    svn_commit* last_commit = apr_palloc(pool, sizeof(svn_commit));
-    last_commit->rev_num = SVN_INVALID_REVNUM;
-    svn_opt_revision_t rev;
-    rev.kind = svn_opt_revision_head;
-    err = svn_client_revprop_list(&last_commit->revprops, url, &rev, &last_commit->rev_num, ctx, pool);
+    svn_commit* commit = apr_palloc(pool, sizeof(svn_commit));
+    //TODO: Set up revnum, tag, and branch-based pulls.
+    commit->rev_num = SVN_INVALID_REVNUM;
+    svn_opt_revision_t svn_rev;
+    svn_rev.kind = svn_opt_revision_head;
+    err = svn_client_revprop_list(&commit->revprops, url, &svn_rev, &commit->rev_num, ctx, pool);
     if (err != NULL) {
         svn_handle_error2(err, stderr, 0, "svn_err: ");
         return NULL;
     }
 
-    return last_commit;
+    return commit;
 }

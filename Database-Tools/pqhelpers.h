@@ -52,11 +52,13 @@ extern int      pqInsertPredecessor(PGconn* conn, char* engine_id, int parent_en
 extern int      pqInsertVersionOs(PGconn* conn, char* version_id, char* os_name);
 extern int      pqInsertVersionEgtb(PGconn* conn, char* version_id, char* egtb_name);
 
-extern PGresult*    pqAllocAllSources(PGconn* conn);
+extern PGresult*    pqAllocAllBranchRevisions(PGconn* conn);
 extern code_link**  pqAllocSourcesFromEngine(PGconn* conn, char* engine_id, size_t* dest_elems);
+extern code_link*   pqAllocSourceFromVersion(PGconn* conn, char* version_id);
+extern revision*    pqAllocRevisionFromVersion(PGconn* conn, char* revision_id);
 
 extern int  pqCreateUpdateTable(PGconn* conn);
-extern int  pqInsertUpdate(PGconn* conn, char* engine_id, char* version_id);
+extern int  pqInsertUpdate(PGconn* conn, char* revision_id);
 extern void pqSummarizeUpdateTable(PGconn* conn);
 extern int  pqDropUpdateTable(PGconn* conn);
 

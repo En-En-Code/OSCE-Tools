@@ -107,7 +107,6 @@ int* pqAllocEngineIdsWithName(PGconn* conn, char* engine_name) {
     }
     
     PQclear(res);
-    
     return results;
 }
 
@@ -130,6 +129,8 @@ char* pqAllocVersionIdWithName(PGconn* conn, char* engine_id, char* version_name
         PQclear(res);
         return ret;
     }
+
+    PQclear(res);
     return NULL;
 }
 
@@ -226,8 +227,8 @@ void pqListVersions(PGconn* conn, char* engine_id) {
     res = PQexecParams(conn,
                         "SELECT version_name, source_uri, frag_type, frag_val, release_date, "
                         "code_lang_name, license_name, is_xboard, is_uci, v.note "
-                        "FROM version v JOIN source USING (source_id) "
-                        "JOIN revision USING (revision_id) JOIN engine USING (engine_id) "
+                        "FROM version v JOIN revision USING (revision_id) "
+                        "JOIN source USING (source_id) JOIN engine USING (engine_id) "
                         "JOIN license USING (license_id) JOIN code_lang USING (code_lang_id) "
                         "WHERE v.engine_id = $1 ORDER BY release_date DESC;",
                         1, NULL, paramValues, NULL, NULL, 0);
@@ -247,7 +248,7 @@ void pqListVersionDetails(PGconn* conn, char* version_id) {
     PGresult* res;
     res = PQexecParams(conn,
                         "SELECT version_name, source_uri, frag_type, frag_val, release_date, "
-                        "code_lang_name, license_name, is_xboard, is_uci, note FROM version "
+                        "code_lang_name, license_name, is_xboard, is_uci, note FROM version v "
                         "JOIN revision USING (revision_id) JOIN source USING (source_id) "
                         "JOIN license USING (license_id) JOIN code_lang USING (code_lang_id) "
                         "WHERE version_id = $1 ORDER BY release_date DESC;",
@@ -301,8 +302,8 @@ char* pqAllocLatestVersionDate(PGconn* conn, char* engine_id) {
         return NULL;
     }
     char* ret = errhandStrdup(PQgetvalue(res, 0, 0));
-    PQclear(res);
 
+    PQclear(res);
     return ret;
 }
 
@@ -321,8 +322,8 @@ char* pqInsertEngine(PGconn* conn, char* engine_name, char* note) {
         return NULL;
     }
     char* ret = errhandStrdup(PQgetvalue(res, 0, 0));
+
     PQclear(res);
-    
     return ret;
 }
 
@@ -397,8 +398,8 @@ int pqGetElementId(PGconn* conn, char* element, const char** literals, int inser
         return -1;
     }
     ret = atoi(PQgetvalue(res, 0, 0));
+
     PQclear(res);
-    
     return ret;
 }
 
@@ -422,8 +423,8 @@ int pqAddRelation(PGconn* conn, char* engine_id, int element_id, const char** li
         PQclear(res);
         return -1;
     }
+
     PQclear(res);
-    
     return 0;
 }
 
@@ -615,16 +616,19 @@ int pqInsertVersionEgtb(PGconn* conn, char* version_id, char* egtb_name) {
         PQclear(res);
         return -1;
     }
+
     PQclear(res);
     return 0;
 }
 
 // Note: The caller is responsible for checking the query was successful and for freeing res.
-PGresult* pqAllocAllSources(PGconn* conn) {
+PGresult* pqAllocAllBranchRevisions(PGconn* conn) {
     PGresult* res;
     res = PQexec(conn,
-                "SELECT engine_name, engine_id, source_uri, vcs_name, source_id FROM source s "
-                "JOIN vcs USING (vcs_id) JOIN engine_source USING (source_id) JOIN engine USING (engine_id);");
+                "SELECT revision_id, source_uri, frag_type, frag_val, vcs_name, "
+                "engine_id, source_id FROM revision JOIN source USING (source_id) "
+                "JOIN vcs USING (vcs_id) JOIN engine_source USING (source_id) "
+                "JOIN engine USING (engine_id) WHERE frag_type = 'branch';");
     return res;
 }
 
@@ -633,7 +637,7 @@ code_link** pqAllocSourcesFromEngine(PGconn* conn, char* engine_id, size_t* dest
 
     PGresult* res;
     res = PQexecParams(conn,
-                        "SELECT source_id, source_uri, vcs_name FROM source "
+                        "SELECT source_id, source_uri, vcs_name FROM source s "
                         "JOIN vcs USING (vcs_id) JOIN engine_source USING (source_id) "
                         "WHERE engine_id = $1;",
                         1, NULL, paramValues, NULL, NULL, 0);
@@ -658,48 +662,103 @@ code_link** pqAllocSourcesFromEngine(PGconn* conn, char* engine_id, size_t* dest
         sources[i]->uri = errhandStrdup(PQgetvalue(res, i, 1));
         sources[i]->vcs = errhandStrdup(PQgetvalue(res, i, 2));
     }
-    PQclear(res);
 
+    PQclear(res);
     return sources;
+}
+
+code_link* pqAllocSourceFromVersion(PGconn* conn, char* version_id) {
+    const char* paramValues[1] = { version_id };
+
+    PGresult* res;
+    res = PQexecParams(conn,
+                        "SELECT source_id, source_uri, vcs_name FROM version v "
+                        "JOIN revision USING (revision_id) JOIN source USING (source_id) "
+                        "JOIN vcs USING (vcs_id) WHERE version_id = $1;",
+                       1, NULL, paramValues, NULL, NULL, 0);
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+        fprintf(stderr, "SELECT failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        return NULL;
+    }
+    code_link* source = errhandMalloc(sizeof(code_link));
+    source->id = errhandStrdup(PQgetvalue(res, 0, 0));
+    source->uri = errhandStrdup(PQgetvalue(res, 0, 1));
+    source->vcs = errhandStrdup(PQgetvalue(res, 0, 2));
+
+    PQclear(res);
+    return source;
+}
+
+revision* pqAllocRevisionFromVersion(PGconn* conn, char* version_id) {
+    const char* paramValues[1] = { version_id };
+    
+    PGresult* res;
+    res = PQexecParams(conn,
+                       "SELECT source_id, frag_type, frag_val FROM version v "
+                       "JOIN revision USING (revision_id) WHERE version_id = $1",
+                       1, NULL, paramValues, NULL, NULL, 0);
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+        fprintf(stderr, "SELECT failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        return NULL;
+    }
+    
+    revision* rev = (revision*)errhandMalloc(sizeof(revision));
+    rev->code_id = errhandStrdup(PQgetvalue(res, 0, 0));
+    char* frag_type = PQgetvalue(res, 0, 1);
+    rev->type = (strncmp(frag_type, "branch", 6) == 0) ? 1 :
+                (strncmp(frag_type, "commit", 6) == 0) ? 2 :
+                (strncmp(frag_type, "revnum", 6) == 0) ? 4 : 8;
+    if (PQgetisnull(res, 0, 2)) {
+        rev->val = NULL;
+    } else {
+        rev->val = errhandStrdup(PQgetvalue(res, 0, 2));
+    }
+
+    PQclear(res);
+    return rev;
 }
 
 // Returns 0 on success of creating the table, and -1 on failure
 int pqCreateUpdateTable(PGconn* conn) {
     PGresult* res;
-    res = PQexec(conn, "CREATE TABLE update ("
-                            "engine_id   int REFERENCES engine (engine_id),"
-                            "source_id   int REFERENCES source (source_id),"
-                            "PRIMARY KEY (engine_id, source_id) );");
+    res = PQexec(conn, "CREATE TABLE update "
+                       "(revision_id int REFERENCES revision (revision_id));");
     if (PQresultStatus(res) != PGRES_COMMAND_OK) {
         fprintf(stderr, "CREATE TABLE failed: %s", PQerrorMessage(conn));
         PQclear(res);
         return -1;
     }
+
     PQclear(res);
     return 0;
 }
 
 // Returns 0 on success of creating the table, and -1 on failure
-int pqInsertUpdate(PGconn* conn, char* engine_id, char* source_id) {
-    const char* paramValues[2] = { engine_id, source_id };
+int pqInsertUpdate(PGconn* conn, char* revision_id) {
+    const char* paramValues[1] = { revision_id };
 
     PGresult* res;
-    res = PQexecParams(conn, "INSERT INTO update (engine_id, source_id) VALUES ($1, $2);",
-                            2, NULL, paramValues, NULL, NULL, 0);
+    res = PQexecParams(conn, "INSERT INTO update (revision_id) VALUES ($1);",
+                            1, NULL, paramValues, NULL, NULL, 0);
     if (PQresultStatus(res) != PGRES_COMMAND_OK) {
         fprintf(stderr, "INSERT failed: %s", PQerrorMessage(conn));
         PQclear(res);
         return -1;
     }
+
     PQclear(res);
     return 0;
 }
 
 void pqSummarizeUpdateTable(PGconn* conn) {
     PGresult* res;
-    res = PQexec(conn, "SELECT engine_name, source_uri, vcs_name FROM update "
+    res = PQexec(conn, "SELECT engine_name, source_uri, vcs_name, version_name FROM engine_source "
                         "JOIN engine USING (engine_id) JOIN source USING (source_id) "
-                        "JOIN vcs USING (vcs_id) ORDER BY engine_name ASC;");
+                        "JOIN vcs USING (vcs_id) JOIN revision USING (source_id) "
+                        "JOIN update USING (revision_id) JOIN version USING (revision_id) "
+                        "ORDER BY engine_name ASC;");
     if (PQresultStatus(res) != PGRES_TUPLES_OK) {
         fprintf(stderr, "SELECT failed: %s", PQerrorMessage(conn));
         PQclear(res);
@@ -710,12 +769,14 @@ void pqSummarizeUpdateTable(PGconn* conn) {
     while (i < tuples) {
         char* vcs = PQgetvalue(res, i, 2);
         if (strncmp(vcs, "git", 3) == 0 || strncmp(vcs, "svn", 3) == 0 || strncmp(vcs, "cvs", 3) == 0) {
-            printf("%s has updates available at %s\n", PQgetvalue(res, i, 0), PQgetvalue(res, i, 1));
+            printf("%s %s has updates at %s\n", PQgetvalue(res, i, 0), PQgetvalue(res, i, 3), PQgetvalue(res, i, 1));
         } else if (strncmp(vcs, "rhv", 3) == 0) {
             printf("%s may have updates; check manually.\n", PQgetvalue(res, i, 0));
         }
         i += 1;
     }
+
+    PQclear(res);
 }
 
 // Returns 0 on success of creating the table, and -1 on failure
@@ -727,6 +788,7 @@ int pqDropUpdateTable(PGconn* conn) {
         PQclear(res);
         return -1;
     }
+
     PQclear(res);
     return 0;
 }
@@ -746,6 +808,7 @@ int pqUpdateVersionDate(PGconn* conn, char* version_id, struct tm* date) {
         PQclear(res);
         return -1;
     }
+
     PQclear(res);
     return 0;
 }
@@ -762,6 +825,7 @@ int pqUpdateVersionNote(PGconn* conn, char* version_id, char* note) {
         PQclear(res);
         return -1;
     }
+
     PQclear(res);
     return 0;
 }

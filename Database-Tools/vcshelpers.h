@@ -36,12 +36,14 @@ typedef struct {
 
 extern int      vcsUpdateScan(PGconn* conn);
 extern void*    vcsUpdateScanThread(void* td);
-extern int      vcsUpdateTrunkInfo(PGconn* conn, char* version_id, code_link* source);
+extern int      vcsScanDateHelper(PGconn* conn, PGresult* res, int idx, time_t commit_time);
+extern int      vcsUpdateRevisionInfo(PGconn* conn, char* version_id, code_link* source);
+extern time_t   vcsScanRevisionCommitTime(PGresult* res, int idx, char vcs, apr_pool_t* pool);
 
-extern time_t vcsLastTrunkCommitTimeGit(char* uri);
-extern time_t vcsLastTrunkCommitTimeSvn(char* uri, apr_pool_t* pool);
+extern time_t vcsRevisionCommitTimeGit(revision* rev, char* uri);
+extern time_t vcsRevisionCommitTimeSvn(revision* rev, char* uri, apr_pool_t* pool);
 
-extern git_commit*  vcsAllocLastTrunkCommitGit(char* uri);
-extern svn_commit*  vcsAllocLastTrunkCommitSvn(char* uri, apr_pool_t* pool);
+extern git_commit*  vcsAllocRevisionCommitGit(revision* rev, char* uri);
+extern svn_commit*  vcsAllocRevisionCommitSvn(revision* rev, char* uri, apr_pool_t* pool);
 
 #endif

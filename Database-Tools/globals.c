@@ -86,7 +86,9 @@ void freeCodeLink(code_link cl) {
 
 void freeRevision(revision r) {
     free(r.code_id);
-    free(r.val);
+    if (r.val != NULL) {
+        free(r.val);
+    }
 }
 
 // converts a char* of the format %Y-%m-%d into a time_t

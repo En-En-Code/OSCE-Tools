@@ -26,9 +26,8 @@ extern void cliListRootCommands();
 extern void cliListEngineCommands(char* engine_name);
 extern void cliListVersionCommands(char* engine_name, char* version_name);
 
-extern size_t   cliReadInput(char* s, int size);
-extern char*    cliAllocInputString(char* explan, size_t size);
-extern char*    cliAllocNDSeries(char* name, size_t size);
+extern char*    cliReadLine(char* s);
+extern char*    cliRequestValue(char* explan, char* s);
 extern int      cliObtainEngineIdFromName(PGconn* conn, char* engine_name);
 extern char*    cliObtainVersionIdFromName(PGconn* conn, char* engine_id, char* version_name);
 extern int      cliObtainSourceFromEngine(PGconn* conn, char* engine_id);

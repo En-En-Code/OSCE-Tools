@@ -84,6 +84,20 @@ void freeCodeLink(code_link cl) {
     free(cl.vcs);
 }
 
+revision* allocRevision(char* id, char* frag_type, char* frag_val, int val_is_null) {
+    revision* rev = (revision*)errhandMalloc(sizeof(revision));
+    rev->code_id = errhandStrdup(id);
+    rev->type = (strncmp(frag_type, "branch", 6) == 0) ? 1 :
+                (strncmp(frag_type, "commit", 6) == 0) ? 2 :
+                (strncmp(frag_type, "revnum", 6) == 0) ? 4 : 8;
+    if (val_is_null) {
+        rev->val = NULL;
+    } else {
+        rev->val = errhandStrdup(frag_val);
+    }
+    return rev;
+}
+
 void freeRevision(revision r) {
     free(r.code_id);
     if (r.val != NULL) {

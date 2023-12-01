@@ -101,9 +101,9 @@ int* pqAllocEngineIdsWithName(PGconn* conn, char* engine_name) {
     }
     // The first value in results stores the number of results, stored in the remaining values.
     int* results = (int*)errhandMalloc((PQntuples(res) + 1) * sizeof(int));
-    *(results) = PQntuples(res);
+    results[0] = PQntuples(res);
     for (int i = 0; i < *(results); i += 1) {
-        *(results + 1 + i) = atoi(PQgetvalue(res, i, 0));
+        results[i+1] = atoi(PQgetvalue(res, i, 0));
     }
     
     PQclear(res);
@@ -327,32 +327,6 @@ char* pqInsertEngine(PGconn* conn, char* engine_name, char* note) {
     return ret;
 }
 
-// A helper function for inserting a newline-delimited series of strings into a database table
-// literals[0] contains the name of the relational table (e.g. engine_author, engine_source)
-// literals[1] contains the name of the id table (e.g. author, source)
-// literals[2] contains the name of the value in the id table (e.g. author_name, source_uri)
-int pqInsertNDSeries(PGconn* conn, char* engine_id, char* nd_series, const char** literals) {
-    int rows = 0;
-    
-    int start_loc = 0;
-    int end_loc = strcspn((nd_series + start_loc), "\n");
-    while (start_loc != end_loc) {
-        *(nd_series + end_loc) = '\0';
-        int element_id = pqGetElementId(conn, (nd_series + start_loc), literals, 1);
-        if (element_id == -1) {
-            return -1;
-        }
-        if (pqAddRelation(conn, engine_id, element_id, literals) == -1) {
-            return -1;
-        }
-        rows += 1;
-        start_loc = end_loc + 1;
-        end_loc = start_loc + strcspn((nd_series + start_loc), "\n");
-    }
-    
-    return rows;
-}
-
 // A helper function which searches the existing table for an entry.
 // literals[0] contains the name of the relational table (e.g. engine_author, engine_source)
 // literals[1] contains the name of the id table (e.g. author, source)
@@ -428,11 +402,6 @@ int pqAddRelation(PGconn* conn, char* engine_id, int element_id, const char** li
     return 0;
 }
 
-int pqInsertNDAuthors(PGconn* conn, char* engine_id, char* authors) {
-    const char* literals[3] = { "engine_author", "author", "author_name" };
-    return pqInsertNDSeries(conn, engine_id, authors, literals);
-}
-
 // Add a new source link if it does not exist, or retrieve its ID if it does.
 // Then, add a relation between in engine_source behind an engine and the source.
 int pqInsertSource(PGconn* conn, char* engine_id, code_link source) {
@@ -475,6 +444,11 @@ int pqInsertSource(PGconn* conn, char* engine_id, code_link source) {
     PQclear(res_source);
     
     return ret;
+}
+
+int pqInsertAuthor(PGconn* conn, char* engine_id, char* author) {
+    const char* author_literals[3] = { "engine_author", "author", "author_name" };
+    return pqGetElementId(conn, author, author_literals, 1);
 }
 
 char* pqInsertVersion(PGconn* conn, char* engine_id, version version_info) {
@@ -704,18 +678,8 @@ revision* pqAllocRevisionFromVersion(PGconn* conn, char* version_id) {
         return NULL;
     }
     
-    revision* rev = (revision*)errhandMalloc(sizeof(revision));
-    rev->code_id = errhandStrdup(PQgetvalue(res, 0, 0));
-    char* frag_type = PQgetvalue(res, 0, 1);
-    rev->type = (strncmp(frag_type, "branch", 6) == 0) ? 1 :
-                (strncmp(frag_type, "commit", 6) == 0) ? 2 :
-                (strncmp(frag_type, "revnum", 6) == 0) ? 4 : 8;
-    if (PQgetisnull(res, 0, 2)) {
-        rev->val = NULL;
-    } else {
-        rev->val = errhandStrdup(PQgetvalue(res, 0, 2));
-    }
-
+    revision* rev = allocRevision(PQgetvalue(res, 0, 0), PQgetvalue(res, 0, 1),
+                                  PQgetvalue(res, 0, 2), PQgetisnull(res, 0, 2));
     PQclear(res);
     return rev;
 }

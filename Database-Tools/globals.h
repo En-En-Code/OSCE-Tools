@@ -48,7 +48,9 @@ extern char* errhandStrdup(const char* s);
 
 extern void freeVersion(version v);
 extern void freeCodeLink(code_link cl);
-extern void freeRevision(revision r);
+
+extern revision*  allocRevision(char* code_id, char* frag_type, char* frag_val, int is_val_null);
+extern void       freeRevision(revision r);
 
 extern time_t readDate(const char* date_str);
 

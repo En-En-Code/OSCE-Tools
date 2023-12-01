@@ -101,14 +101,23 @@ void* vcsUpdateScanThread(void* td) {
     while (i < tuples) {
         // Read vcs_name to decide what to do.
         char* vcs_name = PQgetvalue(res, i, 4);
+        revision* rev;
         if (strncmp(vcs_name, "git", 3) == 0) {
-            time_t commit_time = vcsScanRevisionCommitTime(res, i, 1, NULL);
+            rev = allocRevision(PQgetvalue(res, i, 6), PQgetvalue(res, i, 2),
+                                PQgetvalue(res, i, 3), PQgetisnull(res, i, 3));
+            time_t commit_time = vcsRevisionCommitTimeGit(rev, PQgetvalue(res, i, 1));
             update_count += vcsScanDateHelper(conn, res, i, commit_time);
+            freeRevision(*rev);
+            free(rev);
         } else if (strncmp(vcs_name, "svn", 3) == 0) {
             apr_pool_t* pool = svn_pool_create(NULL);
-            time_t commit_time = vcsScanRevisionCommitTime(res, i, 1, pool);
+            rev = allocRevision(PQgetvalue(res, i, 6), PQgetvalue(res, i, 2),
+                                PQgetvalue(res, i, 3), PQgetisnull(res, i, 3));
+            time_t commit_time = vcsRevisionCommitTimeSvn(rev, PQgetvalue(res, i, 1), pool);
             update_count += vcsScanDateHelper(conn, res, i, commit_time);
             svn_pool_destroy(pool);
+            freeRevision(*rev);
+            free(rev);
         } else if (strncmp(vcs_name, "n/a", 3) == 0) {
             sem_wait(&conn_lock);
             pqInsertUpdate(conn, PQgetvalue(res, i, 0));
@@ -219,34 +228,6 @@ int vcsUpdateRevisionInfo(PGconn* conn, char* version_id, code_link* source) {
     }
 
     return 0;
-}
-
-time_t vcsScanRevisionCommitTime(PGresult* res, int idx, char vcs, apr_pool_t* pool) {
-    revision rev = { 0 };
-    rev.code_id = errhandStrdup(PQgetvalue(res, idx, 6));
-    char* frag_str = PQgetvalue(res, idx, 2);
-    rev.type = (strncmp(frag_str, "branch", 6) == 0) ? 1 :
-                    (strncmp(frag_str, "commit", 6) == 0) ? 2 :
-                    (strncmp(frag_str, "revnum", 6) == 0) ? 4 : 8;
-    if (PQgetisnull(res, idx, 3)) {
-        rev.val = NULL;
-    } else {
-        rev.val = errhandStrdup(PQgetvalue(res, idx, 3));
-    }
-
-    time_t commit_time = 0;
-    if (vcs == 1) {
-        char* uri = errhandStrdup(PQgetvalue(res, idx, 1));
-        commit_time = vcsRevisionCommitTimeGit(&rev, uri);
-        free(uri);
-    } else if (vcs == 2) {
-        char* uri = errhandStrdup(PQgetvalue(res, idx, 1));
-        commit_time = vcsRevisionCommitTimeSvn(&rev, uri, pool);
-        free(uri);
-    }
-    freeRevision(rev);
-
-    return commit_time;
 }
 
 // Returns time of last commit, or negative numbers for errors.

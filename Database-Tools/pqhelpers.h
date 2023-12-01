@@ -37,14 +37,11 @@ extern char*    pqAllocLatestVersionDate(PGconn* conn, char* engine_id);
 
 extern char*    pqInsertEngine(PGconn* conn, char* engine_name, char* note);
 
-extern int  pqInsertNDSeries(PGconn* conn, char* engine_id, char* nd_series, const char** literals);
-
 extern int  pqGetElementId(PGconn* conn, char* element, const char** literals, int insert_on_fail);
 extern int  pqAddRelation(PGconn* conn, char* engine_id, int element_id, const char** literals);
 
-extern int  pqInsertNDAuthors(PGconn* conn, char* engine_id, char* authors);
-
 extern int      pqInsertSource(PGconn* conn, char* engine_id, code_link source);
+extern int      pqInsertAuthor(PGconn* conn, char* engine_id, char* author);
 extern char*    pqInsertVersion(PGconn* conn, char* engine_id, version version_info);
 extern int      pqInsertRevision(PGconn* conn, revision rev_info);
 extern int      pqInsertInspiration(PGconn* conn, char* engine_id, int parent_engine_id);

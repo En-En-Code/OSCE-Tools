@@ -33,7 +33,7 @@ void cliRootLoop(PGconn* conn) {
     printf("Welcome to the database-cli!\n");
     while (input[0] != 'Q') {
         cliListRootCommands();
-        cliReadInput(input, 4096);
+        input = cliReadLine(input);
         input[0] = toupper(input[0]);
         
         switch (input[0]) {
@@ -41,9 +41,10 @@ void cliRootLoop(PGconn* conn) {
                 pqListEngines(conn);
                 break;
             case 'N':
-                engine_name = cliAllocInputString("Name of engine", 256);
+                input = cliRequestValue("Name of engine", input);
+                engine_name = errhandStrdup(input);
                 printf("Note(s) for every version of %s: ", engine_name);
-                cliReadInput(input, 4096);
+                input = cliReadLine(input);
                 char* engine_id_str = pqInsertEngine(conn, engine_name, strlen(input)?input:NULL);
                 if (engine_id_str != NULL) {
                     cliEngineLoop(conn, engine_name, engine_id_str);
@@ -88,7 +89,7 @@ void cliEngineLoop(PGconn* conn, char* engine_name, char* engine_id) {
 
     while (input[0] != 'X') {
         cliListEngineCommands(engine_name);
-        cliReadInput(input, 4096);
+        input = cliReadLine(input);
         input[0] = toupper(input[0]);
         
         switch (input[0]) {
@@ -99,9 +100,10 @@ void cliEngineLoop(PGconn* conn, char* engine_name, char* engine_id) {
                 pqListVersions(conn, engine_id);
                 break;
             case 'A':
-                char* author_names = cliAllocNDSeries("author", 256);
-                pqInsertNDAuthors(conn, engine_id, author_names);
-                free(author_names);
+                input = cliRequestValue("Author", input);
+                char* author_name = errhandStrdup(input);
+                pqInsertAuthor(conn, engine_id, author_name);
+                free(author_name);
                 break;
             case 'C':
                 code_link source = cliAllocCodeLink();
@@ -174,7 +176,7 @@ void cliVersionLoop(PGconn* conn, char* engine_id, char* engine_name, char* vers
 
     while (input[0] != 'X') {
         cliListVersionCommands(engine_name, version_name);
-        cliReadInput(input, 4096);
+        input = cliReadLine(input);
         input[0] = toupper(input[0]);
         switch (input[0]) {
             case 'P':
@@ -228,7 +230,7 @@ void cliListRootCommands() {
 void cliListEngineCommands(char* engine_name) {
     printf("\nWhat would you like to do with %s?\n", engine_name);
     printf("P        (Print info for %s)\n", engine_name);
-    printf("A        (Add new authors to %s)\n", engine_name);
+    printf("A        (Add new author to %s)\n", engine_name);
     printf("C        (Add new source code URI to %s)\n", engine_name);
     printf("N        (Create new version of %s)\n", engine_name);
     printf("I [NAME] (Add engine [NAME] as an inspiration)\n");
@@ -246,79 +248,37 @@ void cliListVersionCommands(char* engine_name, char* engine_version) {
     printf("X        (Exit to the engine menu)\n");
 }
 
-// An fgets-stdin wrapper which handles possible fgets errors.
-// Returns the number of bytes before a newline read, which is far more useful than s.
-size_t cliReadInput(char* s, int size) {
-    if (fgets(s, size, stdin) == NULL) {
-        fprintf(stderr, "fgets returned a NULLPTR.\n");
-        exit(1);
-    }
-    size_t length = strlen(s);
-    if (length > 0) {
-        if (s[length-1] != '\n') {
-            int c;
-            while ((c = getchar()) != '\n' && c != EOF);
-        } else {
-            s[length-1] = '\0';
-            length -= 1;
+// Overhauled client input reader. Might make more allocations, though of
+// more consistent and reasonable sizes, with expansion if necessary.
+char* cliReadLine(char* s) {
+    int temp_len = 256;
+    int buff_len = 0;
+    int used_len = 0;
+    char temp[temp_len];
+    s[0] = '\0';
+    do {
+        buff_len += temp_len;
+        if (fgets(temp, temp_len, stdin) == NULL) {
+            fprintf(stderr, "fgets returned a NULLPTR.\n");
+            exit(1);
         }
-    }
-    return length;
+        s = (char*)errhandRealloc(s, buff_len);
+        strcat(s, temp);
+        used_len = strlen(s);
+    } while (s[used_len - 1] != '\n');
+    s[used_len - 1] = '\0';
+
+    return s;
 }
 
-// Memory is allocated by this function to store the input.
-// Free must be called when finished with the returned value.
-char* cliAllocInputString(char* explan, size_t size) {
-    char* input = (char*)errhandMalloc(size);
-    input[0] = '\0';
-
+// A wrapper for a very common use of cliReadLine, obtaining a particular
+// data point to be entered into the database.
+char* cliRequestValue(char* explan, char* s) {
     do {
         printf("%s (cannot be empty): ", explan);
-        cliReadInput(input, size);
-    } while (input[0] == '\0');
-    
-    return input;
-}
-
-// Memory is allocated by this function to store nd_strings.
-// Free must be called when finished with the returned value.
-// The format is a string of values, each value separated by a newline.
-char* cliAllocNDSeries(char* name, size_t size) {
-    char* nd_strings = NULL;
-    size_t total_bytes = 0;
-
-    while (total_bytes == 0) {
-        size_t bytes_written = 0;
-
-        do {
-            nd_strings = (char*)errhandRealloc(nd_strings, total_bytes + size);
-            printf("Enter one %s (Leave empty to finish adding %ss): ", name, name);
-            bytes_written = cliReadInput(nd_strings + total_bytes, size);
-            nd_strings[total_bytes + bytes_written] = '\n';
-            total_bytes += bytes_written + 1; //jump over the newline/stray terminator
-        } while (bytes_written > 0);
-
-        // This might seem strange to do, but since a stray null terminator could 
-        // be inserted, I need a length which I know to be accurate.
-        total_bytes = strlen(nd_strings);
-        
-        // Remove every newline from the end of the string
-        while (total_bytes > 0) {
-            if (nd_strings[total_bytes-1] != '\n') {
-                break;
-            }
-            total_bytes -= 1;
-            nd_strings[total_bytes] = '\0';
-        }
-        if (total_bytes == 0) {
-            // Preparing to go again.
-            free(nd_strings); // Free the memory, since we need to reallocate.
-            nd_strings = NULL; // If names is not null, errhandRealloc would double free.
-            fprintf(stderr, "No %ss inserted. Minimum one %s needed.\n", name, name);
-        }
-    }
-    
-    return nd_strings;
+        s = cliReadLine(s);
+    } while (s[0] == '\0');
+    return s;
 }
 
 // A helper function, which determines the ID of an engine based on its name.
@@ -343,10 +303,10 @@ int cliObtainEngineIdFromName(PGconn* conn, char* engine_name) {
             printf("Multiple engines of the name %s found.\n", engine_name);
             pqListEnginesWithName(conn, engine_name);
             printf("Select an engine ID from the list to disambiguate: ");
-            cliReadInput(input, 4096);
+            input = cliReadLine(input);
             engine_id = atoi(input);
             for (int i = 0; i < *engine_id_list; i += 1) {
-                if (engine_id == *(engine_id_list + 1 + i)) {
+                if (engine_id == engine_id_list[i+1]) {
                     found_id = 1;
                     break;
                 }
@@ -376,8 +336,10 @@ char* cliObtainVersionIdFromName(PGconn* conn, char* engine_id, char* version_na
 // function, freeCodeLink, to free everything when done with the struct.
 code_link cliAllocCodeLink() {
     code_link codeLink = {0};
-    codeLink.uri = cliAllocInputString("Source URI", 4096);
-    codeLink.vcs = cliAllocInputString("3-letter version control system abbrievation", 4);
+    char* uri_str = errhandMalloc(256);
+    char* vcs_str = errhandMalloc(256);
+    codeLink.uri = cliRequestValue("Source URI", uri_str);
+    codeLink.vcs = cliRequestValue("3-letter version control system abbrievation", vcs_str);
     return codeLink;
 }
 
@@ -408,7 +370,7 @@ version cliAllocVersion(PGconn* conn, char* engine_id) {
         }
         while (choice <= 0 || choice > dest_elems) {
             printf("Select a source using its option number: ");
-            cliReadInput(buff, 4096);
+            buff = cliReadLine(buff);
             choice = atoi(buff);
         }
     }
@@ -417,14 +379,13 @@ version cliAllocVersion(PGconn* conn, char* engine_id) {
     rev.code_id = errhandStrdup(sources[choice-1]->id);
     do {
         printf("Select the identifier type of branch, commit, revision number, or tag (B/C/R/T): ");
-        cliReadInput(buff, 4096);
+        buff = cliReadLine(buff);
         buff[0] = toupper(buff[0]);
     } while (buff[0] != 'B' && buff[0] != 'C' && buff[0] != 'R' && buff[0] != 'T');
     
     if (buff[0] == 'B') {
         printf("Name of branch to watch (if blank, defaults to the repo's trunk): ");
-        cliReadInput(buff, 4096);
-        //TODO: Remove excess whitespace
+        buff = cliReadLine(buff);
         rev.type = 1;
         if (buff[0] != '\0') {
             rev.val = errhandStrdup(buff);
@@ -432,34 +393,38 @@ version cliAllocVersion(PGconn* conn, char* engine_id) {
             rev.val = NULL;
         }
     } else if (buff[0] == 'C') {
-        printf("Commit hash: ");
-        cliReadInput(buff, 4096);
-        //TODO: Perform verification for this to be a hash.
+        int hash_len;
+        do {
+            hash_len = 0;
+            printf("Commit hash (40 hexadecimal characters): ");
+            buff = cliReadLine(buff);
+            while (isxdigit(buff[hash_len])) {
+                hash_len += 1;
+            }
+        } while (hash_len < 40);
         rev.type = 2;
         rev.val = errhandStrdup(buff);
     } else if (buff[0] == 'R') {
         do {
             printf("Revision number: ");
-            cliReadInput(buff, 4096);
+            buff = cliReadLine(buff);
         } while (atoi(buff) <= 0);
         rev.type = 4;
         rev.val = errhandStrdup(buff);
     } else {
-        do {
-            printf("Name of tag (cannot be empty): ");
-            cliReadInput(buff, 4096);
-        } while (buff[0] == '\0');
+        buff = cliRequestValue("Name of tag", buff);
         rev.type = 8;
         rev.val = errhandStrdup(buff);
     }
     version_data.rev = rev;
 
-    version_data.versionNum = cliAllocInputString("Version identifier", 256);
+    buff = cliRequestValue("Version identifier", buff);
+    version_data.versionNum = errhandStrdup(buff);
     
     struct tm release_date = { .tm_year = -1, .tm_mon = -1, .tm_mday = -1 };
     while (release_date.tm_year <= 0) {
         printf("Year of release (number greater than 1900): ");
-        cliReadInput(buff, 16);
+        buff = cliReadLine(buff);
         release_date.tm_year = atoi(buff) - 1900;
     }
     int month_len[12] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
@@ -469,24 +434,25 @@ version cliAllocVersion(PGconn* conn, char* engine_id) {
     }
     while (release_date.tm_mon < 0 || release_date.tm_mon > 11) {
         printf("Month of release (number between 1 and 12): ");
-        cliReadInput(buff, 16);
+        buff = cliReadLine(buff);
         release_date.tm_mon = atoi(buff) - 1;
     }
     
     while (release_date.tm_mday < 1 || release_date.tm_mday > month_len[release_date.tm_mon]) {
         printf("Day of release (number between 1 and %d): ", month_len[release_date.tm_mon]);
-        cliReadInput(buff, 16);
+        buff = cliReadLine(buff);
         release_date.tm_mday = atoi(buff);
     }
     version_data.releaseDate = release_date;
 
-    version_data.programLang = cliAllocInputString("Programming language", 64);
+    buff = cliRequestValue("Programming language", buff);
+    version_data.programLang = errhandStrdup(buff);
     
     const char* protocols[2] = { "Xboard", "UCI" };
     for (int i = 0; i <= 1; i++) {
         while (1) {
             printf("Does engine support %s protocol (Y/N, T/F)? ", protocols[i]);
-            cliReadInput(buff, 16);
+            buff = cliReadLine(buff);
             buff[0] = toupper(buff[0]);
             if (buff[0] == 'Y' || buff[0] == 'T') {
                 version_data.protocol |= (1 << i);
@@ -498,10 +464,11 @@ version cliAllocVersion(PGconn* conn, char* engine_id) {
         }
     }
     
-    version_data.license = cliAllocInputString("License", 64);
+    buff = cliRequestValue("License", buff);
+    version_data.license = errhandStrdup(buff);
     
     printf("Other notes about this version: ");
-    cliReadInput(buff, 4096);
+    buff = cliReadLine(buff);
     version_data.note = errhandStrdup(buff);
 
     free(buff);

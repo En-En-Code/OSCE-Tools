@@ -34,11 +34,11 @@ typedef struct {
     int count;
 } scan_thread_info;
 
-extern int      vcsUpdateScan(PGconn* conn);
-extern void*    vcsUpdateScanThread(void* td);
-extern int      vcsScanDateHelper(PGconn* conn, PGresult* res, int idx, time_t commit_time);
-extern int      vcsUpdateRevisionInfo(PGconn* conn, char* version_id, code_link* source);
-extern time_t   vcsScanRevisionCommitTime(PGresult* res, int idx, char vcs, apr_pool_t* pool);
+extern int        vcsUpdateScan(PGconn* conn);
+extern void*      vcsUpdateScanThread(void* td);
+extern int        vcsScanDateHelper(PGconn* conn, PGresult* res, int idx, time_t commit_time);
+extern int        vcsUpdateRevisionInfo(PGconn* conn, char* version_id, code_link* source);
+extern revision*  vcsAllocScannedRevision(PGresult* res, int idx);
 
 extern time_t vcsRevisionCommitTimeGit(revision* rev, char* uri);
 extern time_t vcsRevisionCommitTimeSvn(revision* rev, char* uri, apr_pool_t* pool);

@@ -20,6 +20,7 @@ limitations under the License.
 #include <time.h>
 #include <libpq-fe.h>
 #include "pqhelpers.h"
+#include "pkghelpers.h"
 #include "globals.h"
 
 PGconn* pqInitConnection(const char* conninfo) {
@@ -792,4 +793,68 @@ int pqUpdateVersionNote(PGconn* conn, char* version_id, char* note) {
 
     PQclear(res);
     return 0;
+}
+
+size_t pqExtractPkgbuild(PGconn* conn, char* version_id) {
+    const char* paramValues[1] = { version_id };
+
+    PGresult* res;
+    res = PQexecParams(conn,
+                       "SELECT pkgbuild FROM version WHERE version_id = $1;",
+                       1, NULL, paramValues, NULL, NULL, 0);
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+        fprintf(stderr, "SELECT failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        return 0;
+    }
+    size_t bytes = pkgStoreStringToFile(PQgetvalue(res, 0, 0));
+    if (!bytes) {
+        printf("No PKGBUILD stored in the database. Generating a default...\n");
+        PQclear(res);
+        res = PQexecParams(conn,
+                           "SELECT engine_name, version_name, e.note, source_uri, "
+                           "license_name, vcs_name, frag_type, frag_val FROM engine e "
+                           "JOIN version USING (engine_id) JOIN revision USING (revision_id) "
+                           "JOIN source USING (source_id) JOIN vcs USING (vcs_id) "
+                           "JOIN license USING (license_id) WHERE version_id = $1;",
+                           1, NULL, paramValues, NULL, NULL, 0);
+        if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+            fprintf(stderr, "SELECT failed: %s", PQerrorMessage(conn));
+            PQclear(res);
+            return 0;
+        }
+        bytes = pkgCreateDefaultFile(PQgetvalue(res, 0, 0), PQgetvalue(res, 0, 1),
+                                     PQgetvalue(res, 0, 2), PQgetvalue(res, 0, 3),
+                                     PQgetvalue(res, 0, 4), PQgetvalue(res, 0, 5),
+                                     PQgetvalue(res, 0, 6), PQgetvalue(res, 0, 7));
+    }
+    printf("%li bytes written to PKGBUILD.\n", bytes);
+
+    PQclear(res);
+    return bytes;
+}
+
+size_t pqUpdatePkgbuild(PGconn* conn, char* version_id) {
+    char* pkgbuild = pkgAllocStringFromFile();
+    if (!pkgbuild) {
+        return -1;
+    }
+
+    const char* paramValues[2] = { pkgbuild, version_id };
+
+    PGresult* res;
+    res = PQexecParams(conn,
+                       "UPDATE version SET pkgbuild = $1 WHERE version_id = $2;",
+                       2, NULL, paramValues, NULL, NULL, 0);
+    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
+        fprintf(stderr, "UPDATE failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        free(pkgbuild);
+        return -1;
+    }
+    size_t len = strlen(pkgbuild);
+    printf("%lu bytes written from PKGBUILD to database.\n", len);
+    free(pkgbuild);
+
+    return len;
 }

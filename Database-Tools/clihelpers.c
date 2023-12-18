@@ -208,6 +208,15 @@ void cliVersionLoop(PGconn* conn, char* engine_id, char* engine_name, char* vers
                     free(source);
                 }
                 break;
+            case 'W':
+                pqExtractPkgbuild(conn, version_id);
+                break;
+            case 'B':
+                //TODO:
+                break;
+            case 'S':
+                pqUpdatePkgbuild(conn, version_id);
+                break;
             case 'X':
                 //Intentional no error, since 'X' quits loop.
                 break;
@@ -245,6 +254,9 @@ void cliListVersionCommands(char* engine_name, char* engine_version) {
     printf("O [OS]   (Add operating system [OS] compatible with %s %s)\n", engine_name, engine_version);
     printf("T [EGTB] (Add endgame tablebase [EGTB] compatible with %s %s)\n", engine_name, engine_version);
     printf("U        (Pull updates from HEAD)\n");
+    printf("W        (Write PKGBUILD to current location)\n");
+    printf("B        (Build engine using available PKGBUILD)\n");
+    printf("S        (Store PKGBUILD in directory to %s %s)\n", engine_name, engine_version);
     printf("X        (Exit to the engine menu)\n");
 }
 

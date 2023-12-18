@@ -62,4 +62,8 @@ extern int  pqDropUpdateTable(PGconn* conn);
 extern int  pqUpdateVersionDate(PGconn* conn, char* version_id, struct tm* date);
 extern int  pqUpdateVersionNote(PGconn* conn, char* version_id, char* note);
 
+extern size_t pqExtractPkgbuild(PGconn* conn, char* version_id);
+extern size_t pqUpdatePkgbuild(PGconn* conn, char* version_id);
+//extern int    pqRunPkgbuild();
+
 #endif

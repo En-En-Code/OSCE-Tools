@@ -17,6 +17,7 @@ limitations under the License.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include "pkghelpers.h"
 #include "globals.h"
 
@@ -57,31 +58,54 @@ size_t pkgStoreStringToFile(char* pkgbuild) {
 }
 
 size_t pkgCreateDefaultFile(char* engine_name, char* version_name, char* note, char* uri,
-                            char* license, char* vcs_name, char* frag_type, char* frag_val) {
-    char* pkg_fmt = "# Maintainer: You <You@example.org>\n"
+                            char* license, char* vcs_name, char* code_lang_name,
+                            char* frag_type, char* frag_val) {
+    char* pkg_fmt = "# Maintainer: Your Name <your-name@example.org>\n"
                     "pkgname=%s\n"
                     "pkgver=%s\n"
                     "pkgrel=1\n"
                     "epoch=0\n"
-                    "pkgdesc=%s\n"
-                    "url='%s'\n"
+                    "pkgdesc=\"%s\"\n"
+                    "url=\"%s\"\n"
                     "license=('%s')\n"
-                    "source=('%s')\n"
-                    "cksums('SKIP')\n"
-                    "arch=('any')\n"
-                    "depends=()\n"
+                    "source=(\"%s\")\n"
+                    "md5sums=('SKIP')\n"
+                    "arch=('x86_64')\n"
+                    "depends=(%s)\n"
                     "makedepends=(%s)\n"
                     "checkdepends=()\n\n"
-                    "pkgver() {\n"
-                    "}\n\n"
-                    "prepare() {\n"
-                    "}\n\n"
-                    "build() {\n"
-                    "}\n\n"
-                    "check() {\n"
-                    "}\n";
+                    "prepare() {\n  :\n}\n\n"
+                    "pkgver() {\n  echo \"$pkgver\"\n}\n\n"
+                    "build() {\n  :\n}\n\n"
+                    "check() {\n  :\n}\n\n"
+                    "package() {\n  :\n}";
+    char* name_fmt = "%s-ce%s%s";
     char* source_fmt = "$pkgname::%s+$url%s%s";
     char* frag_fmt = "#%s=%s";
+
+    // Replace all letters with the lowercase equivalent.
+    // Replace all characters besides alphanum, @, ., _, +, and - with _.
+    for (int i = 0; i < strlen(engine_name); i++) {
+        if (isalnum(engine_name[i])) {
+            engine_name[i] = tolower(engine_name[i]);
+        } else if (engine_name[i] != '@' && engine_name[i] != '.' &&
+                    engine_name[i] != '+' && engine_name[i] != '-') {
+            engine_name[i] = '_';
+        }
+    }
+
+    char* name_buf;
+    int name_len = 0;
+    // If the version is based on a branch head, then label it with the vcs.
+    if (!strcmp(frag_type, "branch")) {
+        name_len = snprintf(NULL, 0, name_fmt, engine_name, "-", vcs_name);
+        name_buf = errhandMalloc(name_len + 1);
+        snprintf(name_buf, name_len + 1, name_fmt, engine_name, "-", vcs_name);
+    } else {
+        name_len = snprintf(NULL, 0, name_fmt, engine_name, "", "");
+        name_buf = errhandMalloc(name_len + 1);
+        snprintf(name_buf, name_len + 1, name_fmt, engine_name, "", "");
+    }
 
     char* frag_buf;
     if (frag_val[0] != '\0') {
@@ -93,32 +117,99 @@ size_t pkgCreateDefaultFile(char* engine_name, char* version_name, char* note, c
         frag_buf[0] = '\0';
     }
 
+    // Unlike the database, which uses SPDX identifiers, these identifiers are
+    // the directory names of licenses found in /usr/share/licenses/common/,
+    // except in cases where the license cannot be found there, specified with
+    // 'custom', and possibly some additional information.
+    char* license_buf;
+    if (!strncmp(license, "AGPL-3.0", 8)) {
+        license_buf = errhandStrdup("AGPL3");
+    } else if (!strncmp(license, "Apache-2.0", 10)) {
+        license_buf = errhandStrdup("Apache");
+    } else if (!strncmp(license, "GPL-2.0", 7)) {
+        license_buf = errhandStrdup("GPL2");
+    } else if (!strncmp(license, "GPL-3.0", 7)) {
+        license_buf = errhandStrdup("GPL3");
+    } else if (!strncmp(license, "LGPL-2.1", 8)) {
+        license_buf = errhandStrdup("LGPL2.1");
+    } else if (!strncmp(license, "LGPL-3.0", 8)) {
+        license_buf = errhandStrdup("LGPL3");
+    } else if (!strncmp(license, "MPL-2.0", 7)) {
+        license_buf = errhandStrdup("MPL2");
+    } else if (!strncmp(license, "Unlicense", 9)) {
+        license_buf = errhandStrdup("Unlicense");
+    } else if (!strncmp(license, "Custom", 6)) {
+        license_buf = errhandStrdup("custom");
+    } else if (!strncmp(license, "None", 4)) {
+        license_buf = errhandStrdup("");
+    } else {
+        int license_len = snprintf(NULL, 0, "custom:%s", license);
+        license_buf = errhandMalloc(license_len + 1);
+        snprintf(license_buf, license_len + 1, "custom:%s", license);
+    }
+
+    char* dep_buf;
+    char* makedep_buf;
+    // Handles any dependencies based on the programming language.
+    // TODO: The rest of the programming languages.
+    if (!strcmp(code_lang_name, "C") || !strcmp(code_lang_name, "C++")) {
+        dep_buf = errhandStrdup("'glibc'");
+        makedep_buf = errhandStrdup("");
+    }
+    else if (!strncmp(code_lang_name, "Rust", 4)) {
+        dep_buf = errhandStrdup("");
+        makedep_buf = errhandStrdup("'cargo'");
+    } else {
+        dep_buf = errhandStrdup("");
+        makedep_buf = errhandStrdup("");
+    }
+
     char* source_buf;
-    char* vcs_dep;
+    // Handles dependencies based on the version control system.
     if (!strncmp(vcs_name, "git", 3)) {
         int source_len = snprintf(NULL, 0, source_fmt, vcs_name, ".git", frag_buf);
         source_buf = errhandMalloc(source_len + 1);
         snprintf(source_buf, source_len + 1, source_fmt, vcs_name, ".git", frag_buf);
-        vcs_dep = "git";
+
+        if (strlen(makedep_buf)) {
+            makedep_buf = errhandRealloc(makedep_buf, 2 + strlen(makedep_buf));
+            strcat(makedep_buf, " ");
+        }
+        makedep_buf = errhandRealloc(makedep_buf, 6 + strlen(makedep_buf));
+        makedep_buf = strcat(makedep_buf, "'git'");
     } else if (!strncmp(vcs_name, "svn", 3)) {
         int source_len = snprintf(NULL, 0, source_fmt, vcs_name, "", frag_buf);
         source_buf = errhandMalloc(source_len + 1);
         snprintf(source_buf, source_len + 1, source_fmt, vcs_name, "", frag_buf);
-        vcs_dep = "subversion";
+
+        if (strlen(makedep_buf)) {
+            makedep_buf = errhandRealloc(makedep_buf, 2 + strlen(makedep_buf));
+            strcat(makedep_buf, " ");
+        }
+        makedep_buf = errhandRealloc(makedep_buf, 13 + strlen(makedep_buf));
+        makedep_buf = strcat(makedep_buf, "'subversion'");
     } else {
         source_buf = errhandStrdup(uri);
-        vcs_dep = "";
     }
 
-    int pkg_len = snprintf(NULL, 0, pkg_fmt, engine_name, version_name, note, uri,
-                            license, source_buf, vcs_dep);
+    int pkg_len = snprintf(NULL, 0, pkg_fmt, name_buf, version_name, note, uri,
+                            license_buf, source_buf, dep_buf, makedep_buf);
     char* pkg_buf = errhandMalloc(pkg_len + 1);
-    snprintf(pkg_buf, pkg_len + 1, pkg_fmt, engine_name, version_name, note, uri,
-                            license, source_buf, vcs_dep);
+    snprintf(pkg_buf, pkg_len + 1, pkg_fmt, name_buf, version_name, note, uri,
+                            license_buf, source_buf, dep_buf, makedep_buf);
 
     size_t ret = pkgStoreStringToFile(pkg_buf);
+    free(name_buf);
+    free(license_buf);
     free(source_buf);
+    free(dep_buf);
+    free(makedep_buf);
     free(frag_buf);
     free(pkg_buf);
+
     return ret;
+}
+
+int pkgRunMakepkg() {
+    return system("./pkg-run-makepkg.sh");
 }

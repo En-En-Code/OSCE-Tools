@@ -75,7 +75,8 @@ INSERT INTO code_lang (code_lang_name) VALUES
     ('Zig');
 
 -- A non-exhaustive list of licenses I have found code to be under.
--- The following comments are not legal advice and do not form an attorney-client relationship.
+-- The identifiers are the SPDX identifiers found at https://spdx.org/licenses/ ,
+-- except for 'All-Rights-Reserved', 'Custom', and 'None'.
 CREATE SEQUENCE license_id_seq AS int;
 CREATE TABLE license (
     license_id      int PRIMARY KEY DEFAULT nextval('license_id_seq'),
@@ -83,27 +84,33 @@ CREATE TABLE license (
 );
 ALTER SEQUENCE license_id_seq OWNED BY license.license_id;
 INSERT INTO license (license_name) VALUES
-    ('AGPL-3.0'),
-    ('All Rights Reserved'),    -- Only includes explicitly made copyright claims.
+    ('0BSD'),
+    ('AGPL-3.0-only'),
+    ('AGPL-3.0-or-later'),
+    ('All-Rights-Reserved'),    -- Only includes explicitly made copyright claims.
     ('Apache-2.0'),
-    ('BSD-0-Clause'),
     ('BSD-2-Clause'),
     ('BSD-3-Clause'),
+    ('CC-BY-3.0'),
+    ('CC-BY-4.0'),
     ('CC0-1.0'),                -- Also includes anything labeled as Public Domain.
-    ('CC BY-3.0'),
-    ('CC BY-4.0'),
     ('Custom'),                 -- The author(s) wrote custom usage rules.
     ('EPL-2.0'),
-    ('Expat (MIT)'),
-    ('GPL-2.0'),
-    ('GPL-3.0'),
+    ('GPL-2.0-only'),
+    ('GPL-2.0-or-later'),
+    ('GPL-3.0-only'),
+    ('GPL-3.0-or-later'),
     ('ISC'),
-    ('LGPL-2.1'),
-    ('LGPL-3.0'),
+    ('LGPL-2.1-only'),
+    ('LGPL-2.1-or-later'),
+    ('LGPL-3.0-only'),
+    ('LGPL-3.0-or-later'),
+    ('MIT'),                    -- The Expat License specifically
     ('MPL-2.0'),
     ('None'),                   -- Unlicensed code is assumed All Rights Reserved by default.
     ('Unlicense'),
     ('WTFPL'),
+    ('X11'),                    -- Another license sometimes referred to as 'MIT'.
     ('Zlib');
 
 -- A non-exhaustive list of operating systems the engine's code can be built and run under.
@@ -239,7 +246,7 @@ CREATE TABLE version (
     is_xboard     bool NOT NULL,          -- Can the program interface with Xboard?
     is_uci        bool NOT NULL,          -- Can the program interface with UCI?
     note          text,                   -- Custom documentation/notes.
-    pkgbuild      text                    -- A file which can build the engine from source.
+    pkgbuild      text,                   -- A file which can build the engine from source.
     UNIQUE (engine_id, version_name)
 );
 ALTER SEQUENCE version_id_seq OWNED BY version.version_id;

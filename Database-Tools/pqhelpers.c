@@ -467,11 +467,8 @@ char* pqInsertVersion(PGconn* conn, char* engine_id, version version_info) {
     snprintf(code_lang_id_str, 25, "%d", code_lang_id);
     
     const char* license_literals[3] = {NULL, "license", "license_name"};
-    int license_id = pqGetElementId(conn, version_info.license, license_literals, 0);
-    if (license_id == -1) {
-        fprintf(stderr, "%s was not in the table and is not automatically inserted.\n", version_info.license);
-        return NULL;
-    }
+    int license_id = pqGetElementId(conn, version_info.license, license_literals, 1);
+
     char license_id_str[25];
     snprintf(license_id_str, 25, "%d", license_id);
     
@@ -813,9 +810,10 @@ size_t pqExtractPkgbuild(PGconn* conn, char* version_id) {
         PQclear(res);
         res = PQexecParams(conn,
                            "SELECT engine_name, version_name, e.note, source_uri, "
-                           "license_name, vcs_name, frag_type, frag_val FROM engine e "
-                           "JOIN version USING (engine_id) JOIN revision USING (revision_id) "
-                           "JOIN source USING (source_id) JOIN vcs USING (vcs_id) "
+                           "license_name, vcs_name, code_lang_name, frag_type, frag_val "
+                           "FROM engine e JOIN version USING (engine_id) "
+                           "JOIN revision USING (revision_id) JOIN source USING (source_id) "
+                           "JOIN code_lang USING (code_lang_id) JOIN vcs USING (vcs_id) "
                            "JOIN license USING (license_id) WHERE version_id = $1;",
                            1, NULL, paramValues, NULL, NULL, 0);
         if (PQresultStatus(res) != PGRES_TUPLES_OK) {
@@ -823,10 +821,10 @@ size_t pqExtractPkgbuild(PGconn* conn, char* version_id) {
             PQclear(res);
             return 0;
         }
-        bytes = pkgCreateDefaultFile(PQgetvalue(res, 0, 0), PQgetvalue(res, 0, 1),
-                                     PQgetvalue(res, 0, 2), PQgetvalue(res, 0, 3),
-                                     PQgetvalue(res, 0, 4), PQgetvalue(res, 0, 5),
-                                     PQgetvalue(res, 0, 6), PQgetvalue(res, 0, 7));
+        bytes = pkgCreateDefaultFile(
+                  PQgetvalue(res, 0, 0), PQgetvalue(res, 0, 1), PQgetvalue(res, 0, 2),
+                  PQgetvalue(res, 0, 3), PQgetvalue(res, 0, 4), PQgetvalue(res, 0, 5),
+                  PQgetvalue(res, 0, 6), PQgetvalue(res, 0, 7), PQgetvalue(res, 0, 8));
     }
     printf("%li bytes written to PKGBUILD.\n", bytes);
 

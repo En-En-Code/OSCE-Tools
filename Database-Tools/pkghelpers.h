@@ -20,6 +20,8 @@ limitations under the License.
 extern char*  pkgAllocStringFromFile();
 extern size_t pkgStoreStringToFile(char* pkgbuild);
 extern size_t pkgCreateDefaultFile(char* engine_name, char* version_name, char* note, char* uri,
-                                    char* license, char* vcs_name, char* frag_type, char* frag_val);
+                                    char* license, char* vcs_name, char* code_lang_name,
+                                    char* frag_type, char* frag_val);
+extern int    pkgRunMakepkg();
 
 #endif

@@ -20,6 +20,7 @@ limitations under the License.
 #include <string.h>
 #include <libpq-fe.h>
 #include "clihelpers.h"
+#include "pkghelpers.h"
 #include "pqhelpers.h"
 #include "vcshelpers.h"
 #include "globals.h"
@@ -211,8 +212,10 @@ void cliVersionLoop(PGconn* conn, char* engine_id, char* engine_name, char* vers
             case 'W':
                 pqExtractPkgbuild(conn, version_id);
                 break;
-            case 'B':
-                //TODO:
+            case 'M':
+                if (pkgRunMakepkg()) {
+                    fprintf(stderr, "Makepkg script returned an error.");
+                }
                 break;
             case 'S':
                 pqUpdatePkgbuild(conn, version_id);
@@ -255,7 +258,7 @@ void cliListVersionCommands(char* engine_name, char* engine_version) {
     printf("T [EGTB] (Add endgame tablebase [EGTB] compatible with %s %s)\n", engine_name, engine_version);
     printf("U        (Pull updates from HEAD)\n");
     printf("W        (Write PKGBUILD to current location)\n");
-    printf("B        (Build engine using available PKGBUILD)\n");
+    printf("M        (Run makepkg to build engine using current PKGBUILD)\n");
     printf("S        (Store PKGBUILD in directory to %s %s)\n", engine_name, engine_version);
     printf("X        (Exit to the engine menu)\n");
 }
@@ -299,13 +302,14 @@ char* cliRequestValue(char* explan, char* s) {
 int cliObtainEngineIdFromName(PGconn* conn, char* engine_name) {
     int engine_id = -1;
     int* engine_id_list = pqAllocEngineIdsWithName(conn, engine_name);
-    if (engine_id_list == NULL || *engine_id_list == 0) {
+    if (engine_id_list == NULL || engine_id_list[0] == 0) {
         fprintf(stderr, "No engines found with name %s.\n\n", engine_name);
+        free(engine_id_list);
         return -1;
     }
-    if (*engine_id_list == 1) {
-    // Exactly one engine was found with that name, so use the found ID.
-        engine_id = *(engine_id_list + 1);
+    if (engine_id_list[0] == 1) {
+        // Exactly one engine was found with that name, so use the found ID.
+        engine_id = engine_id_list[1];
     } else {
         // Multiple engines were found with that name, so disambiguate them.
         char found_id = 0;
@@ -317,8 +321,8 @@ int cliObtainEngineIdFromName(PGconn* conn, char* engine_name) {
             printf("Select an engine ID from the list to disambiguate: ");
             input = cliReadLine(input);
             engine_id = atoi(input);
-            for (int i = 0; i < *engine_id_list; i += 1) {
-                if (engine_id == engine_id_list[i+1]) {
+            for (int i = 0; i < engine_id_list[0]; i += 1) {
+                if (engine_id == engine_id_list[i + 1]) {
                     found_id = 1;
                     break;
                 }
@@ -476,7 +480,8 @@ version cliAllocVersion(PGconn* conn, char* engine_id) {
         }
     }
     
-    buff = cliRequestValue("License", buff);
+    buff = cliRequestValue(
+        "License (SPDX identifier, 'None', 'All-Rights-Reserved', or 'Custom')", buff);
     version_data.license = errhandStrdup(buff);
     
     printf("Other notes about this version: ");

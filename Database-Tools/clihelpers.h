@@ -18,21 +18,24 @@ limitations under the License.
 #define CLIHELPERS_H
 
 #include "globals.h"
+#include <libpq-fe.h>
 
 extern void cliRootLoop(PGconn* conn);
 extern void cliEngineLoop(PGconn* conn, char* engine_name, char* engine_id);
-extern void cliVersionLoop(PGconn* conn, char* engine_id, char* engine_name, char* version_id, char* version_name);
+extern void cliVersionLoop(PGconn* conn, char* engine_id, char* engine_name,
+                           char* version_id, char* version_name);
 extern void cliListRootCommands();
 extern void cliListEngineCommands(char* engine_name);
 extern void cliListVersionCommands(char* engine_name, char* version_name);
 
-extern char*    cliReadLine(char* s);
-extern char*    cliRequestValue(char* explan, char* s);
-extern int      cliObtainEngineIdFromName(PGconn* conn, char* engine_name);
-extern char*    cliObtainVersionIdFromName(PGconn* conn, char* engine_id, char* version_name);
-extern int      cliObtainSourceFromEngine(PGconn* conn, char* engine_id);
+extern char* cliReadLine(char* s);
+extern char* cliRequestValue(char* explan, char* s);
+extern int   cliObtainEngineIdFromName(PGconn* conn, char* engine_name);
+extern char* cliObtainVersionIdFromName(PGconn* conn, char* engine_id,
+                                        char* version_name);
+extern int   cliObtainSourceFromEngine(PGconn* conn, char* engine_id);
 
-extern code_link    cliAllocCodeLink();
-extern version      cliAllocVersion(PGconn* conn, char* engine_id);
+extern code_link cliAllocCodeLink();
+extern version   cliAllocVersion(PGconn* conn, char* engine_id);
 
 #endif

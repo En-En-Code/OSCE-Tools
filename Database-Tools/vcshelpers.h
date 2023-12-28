@@ -17,33 +17,38 @@ limitations under the License.
 #ifndef VCSHELPERS_H
 #define VCSHELPERS_H
 
-#include <git2.h>
-#include <apr_hash.h>
-#include <svn_types.h>
 #include "globals.h"
+#include <apr_hash.h>
+#include <git2.h>
+#include <libpq-fe.h>
+#include <svn_types.h>
 
 // Why revprops couldn't just contain the revision number is beyond me
 typedef struct {
-    apr_hash_t* revprops;
+    apr_hash_t*  revprops;
     svn_revnum_t rev_num;
 } svn_commit;
 
 typedef struct {
     PGresult* res;
-    PGconn* conn;
-    int count;
+    PGconn*   conn;
+    int       count;
 } scan_thread_info;
 
-extern int        vcsUpdateScan(PGconn* conn);
-extern void*      vcsUpdateScanThread(void* td);
-extern int        vcsScanDateHelper(PGconn* conn, PGresult* res, int idx, time_t commit_time);
-extern int        vcsUpdateRevisionInfo(PGconn* conn, char* version_id, code_link* source);
-extern revision*  vcsAllocScannedRevision(PGresult* res, int idx);
+extern int       vcsUpdateScan(PGconn* conn);
+extern void*     vcsUpdateScanThread(void* td);
+extern int       vcsScanDateHelper(PGconn* conn, PGresult* res, int idx,
+                                   time_t commit_time);
+extern int       vcsUpdateRevisionInfo(PGconn* conn, char* version_id,
+                                       code_link* source);
+extern revision* vcsAllocScannedRevision(PGresult* res, int idx);
 
 extern time_t vcsRevisionCommitTimeGit(revision* rev, char* uri);
-extern time_t vcsRevisionCommitTimeSvn(revision* rev, char* uri, apr_pool_t* pool);
+extern time_t vcsRevisionCommitTimeSvn(revision* rev, char* uri,
+                                       apr_pool_t* pool);
 
-extern git_commit*  vcsAllocRevisionCommitGit(revision* rev, char* uri);
-extern svn_commit*  vcsAllocRevisionCommitSvn(revision* rev, char* uri, apr_pool_t* pool);
+extern git_commit* vcsAllocRevisionCommitGit(revision* rev, char* uri);
+extern svn_commit* vcsAllocRevisionCommitSvn(revision* rev, char* uri,
+                                             apr_pool_t* pool);
 
 #endif

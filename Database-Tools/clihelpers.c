@@ -14,29 +14,29 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <ctype.h> //for toupper
-#include <string.h>
-#include <libpq-fe.h>
 #include "clihelpers.h"
+#include "globals.h"
 #include "pkghelpers.h"
 #include "pqhelpers.h"
 #include "vcshelpers.h"
-#include "globals.h"
+#include <ctype.h> //for toupper
+#include <libpq-fe.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 void cliRootLoop(PGconn* conn) {
     char* input = (char*)errhandMalloc(4096);
     input[0] = '\0';
     char* engine_name = NULL;
-    int engine_id;
-    
+    int   engine_id;
+
     printf("Welcome to the database-cli!\n");
     while (input[0] != 'Q') {
         cliListRootCommands();
         input = cliReadLine(input);
         input[0] = toupper(input[0]);
-        
+
         switch (input[0]) {
             case 'E':
                 pqListEngines(conn);
@@ -46,7 +46,8 @@ void cliRootLoop(PGconn* conn) {
                 engine_name = errhandStrdup(input);
                 printf("Note(s) for every version of %s: ", engine_name);
                 input = cliReadLine(input);
-                char* engine_id_str = pqInsertEngine(conn, engine_name, strlen(input)?input:NULL);
+                char* engine_id_str = pqInsertEngine(
+                    conn, engine_name, strlen(input) ? input : NULL);
                 if (engine_id_str != NULL) {
                     cliEngineLoop(conn, engine_name, engine_id_str);
                     free(engine_id_str);
@@ -77,7 +78,7 @@ void cliRootLoop(PGconn* conn) {
                 fprintf(stderr, "Command %c not expected.\n", input[0]);
         }
     }
-    
+
     free(input);
 }
 
@@ -85,14 +86,14 @@ void cliEngineLoop(PGconn* conn, char* engine_name, char* engine_id) {
     char* input = (char*)errhandMalloc(4096);
     input[0] = '\0';
     char* parent_engine_name = NULL;
-    int parent_engine_id;
+    int   parent_engine_id;
     char* version_id = NULL;
 
     while (input[0] != 'X') {
         cliListEngineCommands(engine_name);
         input = cliReadLine(input);
         input[0] = toupper(input[0]);
-        
+
         switch (input[0]) {
             case 'P':
                 pqListNote(conn, engine_id);
@@ -106,24 +107,28 @@ void cliEngineLoop(PGconn* conn, char* engine_name, char* engine_id) {
                 pqInsertAuthor(conn, engine_id, author_name);
                 free(author_name);
                 break;
-            case 'C':
+            case 'C': {
                 code_link source = cliAllocCodeLink();
                 pqInsertSource(conn, engine_id, source);
                 freeCodeLink(source);
                 break;
-            case 'N':
+            }
+            case 'N': {
                 version version_info = cliAllocVersion(conn, engine_id);
                 if (version_info.versionNum == NULL) {
-                    fprintf(stderr, "Version was not allocated successfully.\n");
+                    fprintf(stderr,
+                            "Version was not allocated successfully.\n");
                     break;
                 }
                 version_id = pqInsertVersion(conn, engine_id, version_info);
                 if (version_id != NULL) {
-                    cliVersionLoop(conn, engine_id, engine_name, version_id, version_info.versionNum);
+                    cliVersionLoop(conn, engine_id, engine_name, version_id,
+                                   version_info.versionNum);
                     free(version_id);
                 }
                 freeVersion(version_info);
                 break;
+            }
             case 'I':
                 parent_engine_name = strchr(input, ' ');
                 if (parent_engine_name == NULL) {
@@ -131,7 +136,8 @@ void cliEngineLoop(PGconn* conn, char* engine_name, char* engine_id) {
                     break;
                 }
                 parent_engine_name += 1; // Move to the index after the space.
-                parent_engine_id = cliObtainEngineIdFromName(conn, parent_engine_name);
+                parent_engine_id =
+                    cliObtainEngineIdFromName(conn, parent_engine_name);
                 if (parent_engine_id != -1) {
                     pqInsertInspiration(conn, engine_id, parent_engine_id);
                 }
@@ -143,26 +149,30 @@ void cliEngineLoop(PGconn* conn, char* engine_name, char* engine_id) {
                     break;
                 }
                 parent_engine_name += 1; // Move to the index after the space.
-                parent_engine_id = cliObtainEngineIdFromName(conn, parent_engine_name);
+                parent_engine_id =
+                    cliObtainEngineIdFromName(conn, parent_engine_name);
                 if (parent_engine_id != -1) {
                     pqInsertPredecessor(conn, engine_id, parent_engine_id);
                 }
                 break;
-            case 'S':
+            case 'S': {
                 char* version_name = strchr(input, ' ');
                 if (version_name == NULL) {
                     fprintf(stderr, "Name of version expected.\n");
                     break;
                 }
                 version_name += 1; // Move to the index after the space.
-                version_id = cliObtainVersionIdFromName(conn, engine_id, version_name);
+                version_id =
+                    cliObtainVersionIdFromName(conn, engine_id, version_name);
                 if (version_id != NULL) {
-                    cliVersionLoop(conn, engine_id, engine_name, version_id, version_name);
+                    cliVersionLoop(conn, engine_id, engine_name, version_id,
+                                   version_name);
                     free(version_id);
                 }
                 break;
+            }
             case 'X':
-                //Intentional no error, since 'X' quits loop.
+                // Intentional no error, since 'X' quits loop.
                 break;
             default:
                 fprintf(stderr, "Command %c not expected.\n", input[0]);
@@ -171,7 +181,8 @@ void cliEngineLoop(PGconn* conn, char* engine_name, char* engine_id) {
     free(input);
 }
 
-void cliVersionLoop(PGconn* conn, char* engine_id, char* engine_name, char* version_id, char* version_name) {
+void cliVersionLoop(PGconn* conn, char* engine_id, char* engine_name,
+                    char* version_id, char* version_name) {
     char* input = (char*)errhandMalloc(4096);
     input[0] = '\0';
 
@@ -183,7 +194,7 @@ void cliVersionLoop(PGconn* conn, char* engine_id, char* engine_name, char* vers
             case 'P':
                 pqListVersionDetails(conn, version_id);
                 break;
-            case 'O':
+            case 'O': {
                 char* os_name = strchr(input, ' ');
                 if (os_name == NULL) {
                     fprintf(stderr, "Name of operating system expected.\n");
@@ -192,7 +203,8 @@ void cliVersionLoop(PGconn* conn, char* engine_id, char* engine_name, char* vers
                 os_name += 1;
                 pqInsertVersionOs(conn, version_id, os_name);
                 break;
-            case 'T':
+            }
+            case 'T': {
                 char* egtb_name = strchr(input, ' ');
                 if (egtb_name == NULL) {
                     fprintf(stderr, "Name of endgame tablebase expected.\n");
@@ -201,7 +213,8 @@ void cliVersionLoop(PGconn* conn, char* engine_id, char* engine_name, char* vers
                 egtb_name += 1;
                 pqInsertVersionEgtb(conn, version_id, egtb_name);
                 break;
-            case 'U':
+            }
+            case 'U': {
                 code_link* source = pqAllocSourceFromVersion(conn, version_id);
                 if (source) {
                     vcsUpdateRevisionInfo(conn, version_id, source);
@@ -209,6 +222,7 @@ void cliVersionLoop(PGconn* conn, char* engine_id, char* engine_name, char* vers
                     free(source);
                 }
                 break;
+            }
             case 'W':
                 pqExtractPkgbuild(conn, version_id);
                 break;
@@ -221,7 +235,7 @@ void cliVersionLoop(PGconn* conn, char* engine_id, char* engine_name, char* vers
                 pqUpdatePkgbuild(conn, version_id);
                 break;
             case 'X':
-                //Intentional no error, since 'X' quits loop.
+                // Intentional no error, since 'X' quits loop.
                 break;
             default:
                 fprintf(stderr, "Command %c not expected.\n", input[0]);
@@ -252,23 +266,27 @@ void cliListEngineCommands(char* engine_name) {
 }
 
 void cliListVersionCommands(char* engine_name, char* engine_version) {
-    printf("\nWhat would you like to do with %s %s?\n", engine_name, engine_version);
+    printf("\nWhat would you like to do with %s %s?\n", engine_name,
+           engine_version);
     printf("P        (Print info for %s %s)\n", engine_name, engine_version);
-    printf("O [OS]   (Add operating system [OS] compatible with %s %s)\n", engine_name, engine_version);
-    printf("T [EGTB] (Add endgame tablebase [EGTB] compatible with %s %s)\n", engine_name, engine_version);
+    printf("O [OS]   (Add operating system [OS] compatible with %s %s)\n",
+           engine_name, engine_version);
+    printf("T [EGTB] (Add endgame tablebase [EGTB] compatible with %s %s)\n",
+           engine_name, engine_version);
     printf("U        (Pull updates from HEAD)\n");
     printf("W        (Write PKGBUILD to current location)\n");
     printf("M        (Run makepkg to build engine using current PKGBUILD)\n");
-    printf("S        (Store PKGBUILD in directory to %s %s)\n", engine_name, engine_version);
+    printf("S        (Store PKGBUILD in directory to %s %s)\n", engine_name,
+           engine_version);
     printf("X        (Exit to the engine menu)\n");
 }
 
 // Overhauled client input reader. Might make more allocations, though of
 // more consistent and reasonable sizes, with expansion if necessary.
 char* cliReadLine(char* s) {
-    int temp_len = 256;
-    int buff_len = 0;
-    int used_len = 0;
+    int  temp_len = 256;
+    int  buff_len = 0;
+    int  used_len = 0;
     char temp[temp_len];
     s[0] = '\0';
     do {
@@ -300,10 +318,10 @@ char* cliRequestValue(char* explan, char* s) {
 // If multiple engines with the same name exist, asks for user to disambiguate.
 // Returns -1 if no engine with the name exists.
 int cliObtainEngineIdFromName(PGconn* conn, char* engine_name) {
-    int engine_id = -1;
+    int  engine_id = -1;
     int* engine_id_list = pqAllocEngineIdsWithName(conn, engine_name);
     if (engine_id_list == NULL || engine_id_list[0] == 0) {
-        fprintf(stderr, "No engines found with name %s.\n\n", engine_name);
+        fprintf(stderr, "No engines found with name %s.\n", engine_name);
         free(engine_id_list);
         return -1;
     }
@@ -312,7 +330,7 @@ int cliObtainEngineIdFromName(PGconn* conn, char* engine_name) {
         engine_id = engine_id_list[1];
     } else {
         // Multiple engines were found with that name, so disambiguate them.
-        char found_id = 0;
+        char  found_id = 0;
         char* input = (char*)errhandMalloc(4096);
         input[0] = '\0';
         while (!found_id) {
@@ -333,15 +351,16 @@ int cliObtainEngineIdFromName(PGconn* conn, char* engine_name) {
         }
         free(input);
     }
-    printf("\n");
     free(engine_id_list);
     return engine_id;
 }
 
-char* cliObtainVersionIdFromName(PGconn* conn, char* engine_id, char* version_name) {
+char* cliObtainVersionIdFromName(PGconn* conn, char* engine_id,
+                                 char* version_name) {
     char* version_id = pqAllocVersionIdWithName(conn, engine_id, version_name);
     if (version_id == NULL) {
-        fprintf(stderr, "No version %s associated with the engine.\n", version_name);
+        fprintf(stderr, "No version %s associated with the engine.\n",
+                version_name);
         return NULL;
     }
     return version_id;
@@ -352,10 +371,11 @@ char* cliObtainVersionIdFromName(PGconn* conn, char* engine_id, char* version_na
 // function, freeCodeLink, to free everything when done with the struct.
 code_link cliAllocCodeLink() {
     code_link codeLink = {0};
-    char* uri_str = errhandMalloc(256);
-    char* vcs_str = errhandMalloc(256);
+    char*     uri_str = errhandMalloc(256);
+    char*     vcs_str = errhandMalloc(256);
     codeLink.uri = cliRequestValue("Source URI", uri_str);
-    codeLink.vcs = cliRequestValue("3-letter version control system abbrievation", vcs_str);
+    codeLink.vcs = cliRequestValue(
+        "3-letter version control system abbrievation", vcs_str);
     return codeLink;
 }
 
@@ -364,25 +384,28 @@ code_link cliAllocCodeLink() {
 // function, freeVersion, to free everything when done with the struct.
 version cliAllocVersion(PGconn* conn, char* engine_id) {
     version version_data = {0};
-    char* buff = (char*)errhandMalloc(4096);
-    
-    size_t dest_elems = 0;
-    code_link** sources = pqAllocSourcesFromEngine(conn, engine_id, &dest_elems);
+    char*   buff = (char*)errhandMalloc(4096);
+
+    size_t      dest_elems = 0;
+    code_link** sources =
+        pqAllocSourcesFromEngine(conn, engine_id, &dest_elems);
     int choice = -1;
     if (dest_elems < 1) {
-        // If no source exists for the engine, then creating a version is not allowed
-        fprintf(stderr, "Creating a version cannot be done without a source.\n");
+        // If the engine has no sources, creating a version is not allowed
+        fprintf(stderr,
+                "Creating a version cannot be done without a source.\n");
         free(buff);
-        //sources does not need to be freed because it was never mallocked
+        // sources does not need to be freed because it was never mallocked
         return version_data;
     } else if (dest_elems == 1) {
-        printf("One source, %s, found. Proceeding with this source.\n", sources[0]->uri);
+        printf("One source, %s, found. Proceeding with this source.\n",
+               sources[0]->uri);
         choice = 1;
     } else {
-        //Select a source between the available ones for this engine.
+        // Select a source between the available ones for this engine.
         printf("Multiple sources to use found.\n");
         for (int i = 1; i <= dest_elems; i++) {
-            printf("Opt. %d: %s\n", i, sources[i-1]->uri);
+            printf("Opt. %d: %s\n", i, sources[i - 1]->uri);
         }
         while (choice <= 0 || choice > dest_elems) {
             printf("Select a source using its option number: ");
@@ -390,17 +413,21 @@ version cliAllocVersion(PGconn* conn, char* engine_id) {
             choice = atoi(buff);
         }
     }
-    
-    revision rev = { 0 };
-    rev.code_id = errhandStrdup(sources[choice-1]->id);
+
+    revision rev = {0};
+    rev.code_id = errhandStrdup(sources[choice - 1]->id);
     do {
-        printf("Select the identifier type of branch, commit, revision number, or tag (B/C/R/T): ");
+        printf(
+            "Select the identifier type of branch, commit, revision number, or "
+            "tag (B/C/R/T): ");
         buff = cliReadLine(buff);
         buff[0] = toupper(buff[0]);
-    } while (buff[0] != 'B' && buff[0] != 'C' && buff[0] != 'R' && buff[0] != 'T');
-    
+    } while (buff[0] != 'B' && buff[0] != 'C' && buff[0] != 'R' &&
+             buff[0] != 'T');
+
     if (buff[0] == 'B') {
-        printf("Name of branch to watch (if blank, defaults to the repo's trunk): ");
+        printf("Name of branch to watch (if blank, defaults to the repo's "
+               "trunk): ");
         buff = cliReadLine(buff);
         rev.type = 1;
         if (buff[0] != '\0') {
@@ -436,8 +463,8 @@ version cliAllocVersion(PGconn* conn, char* engine_id) {
 
     buff = cliRequestValue("Version identifier", buff);
     version_data.versionNum = errhandStrdup(buff);
-    
-    struct tm release_date = { .tm_year = -1, .tm_mon = -1, .tm_mday = -1 };
+
+    struct tm release_date = {.tm_year = -1, .tm_mon = -1, .tm_mday = -1};
     while (release_date.tm_year <= 0) {
         printf("Year of release (number greater than 1900): ");
         buff = cliReadLine(buff);
@@ -453,9 +480,11 @@ version cliAllocVersion(PGconn* conn, char* engine_id) {
         buff = cliReadLine(buff);
         release_date.tm_mon = atoi(buff) - 1;
     }
-    
-    while (release_date.tm_mday < 1 || release_date.tm_mday > month_len[release_date.tm_mon]) {
-        printf("Day of release (number between 1 and %d): ", month_len[release_date.tm_mon]);
+
+    while (release_date.tm_mday < 1 ||
+           release_date.tm_mday > month_len[release_date.tm_mon]) {
+        printf("Day of release (number between 1 and %d): ",
+               month_len[release_date.tm_mon]);
         buff = cliReadLine(buff);
         release_date.tm_mday = atoi(buff);
     }
@@ -463,11 +492,12 @@ version cliAllocVersion(PGconn* conn, char* engine_id) {
 
     buff = cliRequestValue("Programming language", buff);
     version_data.programLang = errhandStrdup(buff);
-    
-    const char* protocols[2] = { "Xboard", "UCI" };
+
+    const char* protocols[2] = {"Xboard", "UCI"};
     for (int i = 0; i <= 1; i++) {
         while (1) {
-            printf("Does engine support %s protocol (Y/N, T/F)? ", protocols[i]);
+            printf("Does engine support %s protocol (Y/N, T/F)? ",
+                   protocols[i]);
             buff = cliReadLine(buff);
             buff[0] = toupper(buff[0]);
             if (buff[0] == 'Y' || buff[0] == 'T') {
@@ -479,11 +509,12 @@ version cliAllocVersion(PGconn* conn, char* engine_id) {
             }
         }
     }
-    
+
     buff = cliRequestValue(
-        "License (SPDX identifier, 'None', 'All-Rights-Reserved', or 'Custom')", buff);
+        "License (SPDX identifier, 'None', 'All-Rights-Reserved', or 'Custom')",
+        buff);
     version_data.license = errhandStrdup(buff);
-    
+
     printf("Other notes about this version: ");
     buff = cliReadLine(buff);
     version_data.note = errhandStrdup(buff);

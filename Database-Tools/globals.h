@@ -21,18 +21,18 @@ limitations under the License.
 
 typedef struct {
     char* code_id;
-    char type; //A bit mask. 1 for branch, 2 for commit, 4 for revnum, 8 for tag.
+    char  type; // 1 for branch, 2 for commit, 4 for revnum, 8 for tag.
     char* val;
 } revision;
 
 typedef struct {
-    char* versionNum;
-    revision rev;
+    char*     versionNum;
+    revision  rev;
     struct tm releaseDate;
-    char* programLang;
-    char* license;
-    char protocol; //A bit mask. 1 is xboard compat, 2 is uci copmat.
-    char* note;
+    char*     programLang;
+    char*     license;
+    char      protocol; // A bit mask. 1 is xboard compat, 2 is uci copmat.
+    char*     note;
 } version;
 
 typedef struct {
@@ -49,14 +49,16 @@ extern char* errhandStrdup(const char* s);
 extern void freeVersion(version v);
 extern void freeCodeLink(code_link cl);
 
-extern revision*  allocRevision(char* code_id, char* frag_type, char* frag_val, int is_val_null);
-extern void       freeRevision(revision r);
+extern revision* allocRevision(char* code_id, char* frag_type, char* frag_val,
+                               int is_val_null);
+extern void      freeRevision(revision r);
 
 extern time_t readDate(const char* date_str);
 
 struct FTW;
 struct stat;
-extern int  rm_file(const char* fpath, const struct stat* sb, int typeflag, struct FTW* ftwbuf);
-extern int  rm_file_recursive(char* fpath);
+extern int rm_file(const char* fpath, const struct stat* sb, int typeflag,
+                   struct FTW* ftwbuf);
+extern int rm_file_recursive(char* fpath);
 
 #endif

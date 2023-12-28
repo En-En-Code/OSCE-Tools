@@ -1,0 +1,5 @@
+AlignConsecutiveDeclarations: true
+IndentCaseLabels: true
+IndentWidth: 4
+PointerAlignment: Left
+ReferenceAlignment: Right

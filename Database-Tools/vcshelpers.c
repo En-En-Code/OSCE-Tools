@@ -14,34 +14,35 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include <unistd.h>
-#include <stdio.h>
-#include <string.h>
-#include <time.h>
+#include "vcshelpers.h"
+#include "globals.h"
+#include "pqhelpers.h"
+#include <git2.h>
+#include <libpq-fe.h>
 #include <math.h>
 #include <pthread.h>
 #include <semaphore.h>
-#include <libpq-fe.h>
-#include <git2.h>
+#include <stdio.h>
+#include <string.h>
 #include <svn_client.h>
 #include <svn_config.h>
 #include <svn_error.h>
 #include <svn_opt.h>
 #include <svn_pools.h>
 #include <svn_props.h>
-#include "vcshelpers.h"
-#include "pqhelpers.h"
-#include "globals.h"
+#include <time.h>
+#include <unistd.h>
 
 const int HASH_RECORD_LENGTH = 7;
 const int MAX_PTHREADS = 8;
+
 sem_t conn_lock;
 sem_t idx_lock;
-int scan_idx;
+int   scan_idx;
 
 // Returns the number of engines with updates found, or -1 on failure.
 int vcsUpdateScan(PGconn* conn) {
-    clock_t start = clock();
+    clock_t   start = clock();
     PGresult* res = pqAllocAllBranchRevisions(conn);
     if (PQresultStatus(res) != PGRES_TUPLES_OK) {
         fprintf(stderr, "SELECT failed: %s\n", PQerrorMessage(conn));
@@ -56,7 +57,7 @@ int vcsUpdateScan(PGconn* conn) {
     sem_init(&conn_lock, 0, 1);
     scan_idx = 0;
     sem_init(&idx_lock, 0, 1);
-    pthread_t tid[MAX_PTHREADS];
+    pthread_t         tid[MAX_PTHREADS];
     scan_thread_info* td = errhandCalloc(MAX_PTHREADS, sizeof(*td));
     for (int i = 0; i < MAX_PTHREADS; i++) {
         td[i].res = res;
@@ -80,7 +81,7 @@ int vcsUpdateScan(PGconn* conn) {
     sem_destroy(&idx_lock);
     free(td);
     clock_t end = clock();
-    double len = (end-start)*1000/CLOCKS_PER_SEC;
+    double  len = (end - start) * 1000 / CLOCKS_PER_SEC;
     printf("\nCPU time: %.1f ms\n", len);
 
     return update_count;
@@ -88,11 +89,12 @@ int vcsUpdateScan(PGconn* conn) {
 
 // Helper function to vcsUpdateScan that runs concurrently
 void* vcsUpdateScanThread(void* td) {
-    int update_count = 0;
     scan_thread_info* thread_info = td;
+
     PGresult* res = thread_info->res;
-    PGconn* conn = thread_info->conn;
-    int tuples = PQntuples(res);
+    PGconn*   conn = thread_info->conn;
+    int       tuples = PQntuples(res);
+    int       update_count = 0;
 
     sem_wait(&idx_lock);
     int i = scan_idx;
@@ -100,12 +102,13 @@ void* vcsUpdateScanThread(void* td) {
     sem_post(&idx_lock);
     while (i < tuples) {
         // Read vcs_name to decide what to do.
-        char* vcs_name = PQgetvalue(res, i, 4);
+        char*     vcs_name = PQgetvalue(res, i, 4);
         revision* rev;
         if (strncmp(vcs_name, "git", 3) == 0) {
             rev = allocRevision(PQgetvalue(res, i, 6), PQgetvalue(res, i, 2),
                                 PQgetvalue(res, i, 3), PQgetisnull(res, i, 3));
-            time_t commit_time = vcsRevisionCommitTimeGit(rev, PQgetvalue(res, i, 1));
+            time_t commit_time =
+                vcsRevisionCommitTimeGit(rev, PQgetvalue(res, i, 1));
             update_count += vcsScanDateHelper(conn, res, i, commit_time);
             freeRevision(*rev);
             free(rev);
@@ -113,7 +116,8 @@ void* vcsUpdateScanThread(void* td) {
             apr_pool_t* pool = svn_pool_create(NULL);
             rev = allocRevision(PQgetvalue(res, i, 6), PQgetvalue(res, i, 2),
                                 PQgetvalue(res, i, 3), PQgetisnull(res, i, 3));
-            time_t commit_time = vcsRevisionCommitTimeSvn(rev, PQgetvalue(res, i, 1), pool);
+            time_t commit_time =
+                vcsRevisionCommitTimeSvn(rev, PQgetvalue(res, i, 1), pool);
             update_count += vcsScanDateHelper(conn, res, i, commit_time);
             svn_pool_destroy(pool);
             freeRevision(*rev);
@@ -124,8 +128,10 @@ void* vcsUpdateScanThread(void* td) {
             sem_post(&conn_lock);
             fflush(stdout);
         } else if (strncmp(vcs_name, "rhv", 3) != 0) {
-            // I choose (for the moment), to not be informed about engines residing in archives.
-            fprintf(stderr, "Unexpected vcs %s of %s\n", vcs_name, PQgetvalue(res, i, 1));
+            // I choose (for the moment), to not be informed about engines
+            // residing in archives.
+            fprintf(stderr, "Unexpected vcs %s of %s\n", vcs_name,
+                    PQgetvalue(res, i, 1));
             fflush(stderr);
         }
         sem_wait(&idx_lock);
@@ -134,15 +140,18 @@ void* vcsUpdateScanThread(void* td) {
         sem_post(&idx_lock);
     }
     thread_info->count = update_count;
-    return NULL;  //I don't need anything returned really.
+    return NULL; // I don't need anything returned really.
 }
 
-// A helper function to offload performing the date comparison in the update scan.
-// Returns 1 if the date pulled is later than the date in the database, 0 otherwise.
-int vcsScanDateHelper(PGconn* conn, PGresult* res, int idx, time_t commit_time) {
+// A helper function to offload performing the date comparison in the update
+// scan. Returns 1 if the date pulled is later than the date in the database, 0
+// otherwise.
+int vcsScanDateHelper(PGconn* conn, PGresult* res, int idx,
+                      time_t commit_time) {
     int ret = 0;
     sem_wait(&conn_lock);
-    char* stored_date_str = pqAllocLatestVersionDate(conn, PQgetvalue(res, idx, 5));
+    char* stored_date_str =
+        pqAllocLatestVersionDate(conn, PQgetvalue(res, idx, 5));
     sem_post(&conn_lock);
     time_t stored_time = readDate(stored_date_str);
     free(stored_date_str);
@@ -160,13 +169,15 @@ int vcsScanDateHelper(PGconn* conn, PGresult* res, int idx, time_t commit_time) 
     return ret;
 }
 
-// With the way engines having multiple sources works now, source cannot be NULL.
-// Its allocation and deallocation are now handled by the cli.
+// With the way engines having multiple sources works now, source cannot be
+// NULL. Its allocation and deallocation are now handled by the cli.
 int vcsUpdateRevisionInfo(PGconn* conn, char* version_id, code_link* source) {
     if (strncmp(source->vcs, "git", 3) == 0) {
         revision* rev = pqAllocRevisionFromVersion(conn, version_id);
         if (rev == NULL) {
-            fprintf(stderr, "Revision info could not be obtained from the version info.\n");
+            fprintf(
+                stderr,
+                "Revision info could not be obtained from the version info.\n");
             return -1;
         }
         git_commit* commit = vcsAllocRevisionCommitGit(rev, source->uri);
@@ -178,9 +189,10 @@ int vcsUpdateRevisionInfo(PGconn* conn, char* version_id, code_link* source) {
 
         time_t commit_time = git_commit_time(commit);
 
-        const char* commit_summary = git_commit_summary(commit);
+        const char*    commit_summary = git_commit_summary(commit);
         const git_oid* hash = git_commit_id(commit);
-        char* note = errhandMalloc(strlen(commit_summary) + HASH_RECORD_LENGTH + 4);
+        char*          note =
+            errhandMalloc(strlen(commit_summary) + HASH_RECORD_LENGTH + 4);
         sprintf(note, "[");
         // git_oid_nfmt could technically fail, but surely it won't :Clueless:
         git_oid_nfmt((note + 1), HASH_RECORD_LENGTH, hash);
@@ -193,9 +205,11 @@ int vcsUpdateRevisionInfo(PGconn* conn, char* version_id, code_link* source) {
         git_commit_free(commit);
     } else if (strncmp(source->vcs, "svn", 3) == 0) {
         apr_pool_t* pool = svn_pool_create(NULL);
-        revision* rev = pqAllocRevisionFromVersion(conn, version_id);
+        revision*   rev = pqAllocRevisionFromVersion(conn, version_id);
         if (rev == NULL) {
-            fprintf(stderr, "Revision info could not be obtained from the version info.\n");
+            fprintf(
+                stderr,
+                "Revision info could not be obtained from the version info.\n");
             svn_pool_destroy(pool);
             return -1;
         }
@@ -209,22 +223,27 @@ int vcsUpdateRevisionInfo(PGconn* conn, char* version_id, code_link* source) {
             return -1;
         }
 
-        time_t commit_date = readDate(svn_prop_get_value(commit->revprops, SVN_PROP_REVISION_DATE));
+        time_t commit_date = readDate(
+            svn_prop_get_value(commit->revprops, SVN_PROP_REVISION_DATE));
 
-        const char* commit_summary = svn_prop_get_value(commit->revprops, SVN_PROP_REVISION_LOG);
+        const char* commit_summary =
+            svn_prop_get_value(commit->revprops, SVN_PROP_REVISION_LOG);
         if (commit_summary == NULL) {
             commit_summary = "";
         }
-        char* note = errhandMalloc(strcspn(commit_summary, "\n") + floor(log10(commit->rev_num) + 1) + 5);
-        sprintf(note, "[r%ld] %.*s", commit->rev_num, (int)strcspn(commit_summary, "\n"), commit_summary);
+        char* note = errhandMalloc(strcspn(commit_summary, "\n") +
+                                   floor(log10(commit->rev_num) + 1) + 5);
+        sprintf(note, "[r%ld] %.*s", commit->rev_num,
+                (int)strcspn(commit_summary, "\n"), commit_summary);
 
         pqUpdateVersionDate(conn, version_id, gmtime(&commit_date));
         pqUpdateVersionNote(conn, version_id, note);
-        
+
         free(note);
         svn_pool_destroy(pool);
     } else {
-        fprintf(stderr, "Sources not using a version control system cannot automatically be updated.\n");
+        fprintf(stderr, "Sources not using a version control system cannot "
+                        "automatically be updated.\n");
     }
 
     return 0;
@@ -249,17 +268,18 @@ time_t vcsRevisionCommitTimeSvn(revision* rev, char* uri, apr_pool_t* pool) {
         return -1;
     }
 
-    return readDate(svn_prop_get_value(commit->revprops, SVN_PROP_REVISION_DATE));
+    return readDate(
+        svn_prop_get_value(commit->revprops, SVN_PROP_REVISION_DATE));
 }
 
 // Returns a pointer to the last git commit made to HEAD in uri. Must be freed.
 git_commit* vcsAllocRevisionCommitGit(revision* rev, char* uri) {
     size_t size = 256;
-    char* path = errhandMalloc(size);
-    while (getcwd(path, size-12) == NULL) {
+    char*  path = errhandMalloc(size);
+    while (getcwd(path, size - 12) == NULL) {
         size *= 2;
         path = errhandRealloc(path, size);
-    } 
+    }
     strcat(path, "/tempXXXXXX");
     path = mkdtemp(path);
     if (path == NULL) {
@@ -268,9 +288,9 @@ git_commit* vcsAllocRevisionCommitGit(revision* rev, char* uri) {
     }
 
     git_clone_options clone_opts = GIT_CLONE_OPTIONS_INIT;
-    git_repository* repo = NULL;
-    const char* url = uri;
-    char frag_type = rev->type;
+    git_repository*   repo = NULL;
+    const char*       url = uri;
+    char              frag_type = rev->type;
     if (frag_type == 4) {
         fprintf(stderr, "Revision number is not a valid identifier in Git.\n");
         return NULL;
@@ -346,9 +366,10 @@ git_commit* vcsAllocRevisionCommitGit(revision* rev, char* uri) {
 }
 
 // Memory is allocated by pool, which must be freed when finished.
-svn_commit* vcsAllocRevisionCommitSvn(revision* rev, char* uri, apr_pool_t* pool) {
+svn_commit* vcsAllocRevisionCommitSvn(revision* rev, char* uri,
+                                      apr_pool_t* pool) {
     svn_error_t* err;
-    const char* url = uri;
+    const char*  url = uri;
 
     err = svn_config_ensure(NULL, pool);
     if (err != NULL) {
@@ -369,11 +390,12 @@ svn_commit* vcsAllocRevisionCommitSvn(revision* rev, char* uri, apr_pool_t* pool
     }
 
     svn_commit* commit = apr_palloc(pool, sizeof(svn_commit));
-    //TODO: Set up revnum, tag, and branch-based pulls.
+    // TODO: Set up revnum, tag, and branch-based pulls.
     commit->rev_num = SVN_INVALID_REVNUM;
     svn_opt_revision_t svn_rev;
     svn_rev.kind = svn_opt_revision_head;
-    err = svn_client_revprop_list(&commit->revprops, url, &svn_rev, &commit->rev_num, ctx, pool);
+    err = svn_client_revprop_list(&commit->revprops, url, &svn_rev,
+                                  &commit->rev_num, ctx, pool);
     if (err != NULL) {
         svn_handle_error2(err, stderr, 0, "svn_err: ");
         return NULL;

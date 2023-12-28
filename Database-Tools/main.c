@@ -14,11 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include <libpq-fe.h>
-#include <git2.h>
-#include <svn_cmdline.h>
 #include "clihelpers.h"
 #include "pqhelpers.h"
+#include <git2.h>
+#include <libpq-fe.h>
+#include <svn_cmdline.h>
 
 int main(int argc, char** argv) {
     const char* conninfo;
@@ -37,7 +37,7 @@ int main(int argc, char** argv) {
     git_libgit2_init();
 
     cliRootLoop(conn);
-    
+
     PQfinish(conn);
     git_libgit2_shutdown();
 

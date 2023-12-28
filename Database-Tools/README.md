@@ -13,4 +13,6 @@ After installing PostgreSQL, run:
   * (or `systemctl enable --now postgresql.service`) to have postgresql launch on every startup,)
 * `psql -d engine_db` to have a direct interface to the database.
 
-More likely, however, you will want a way to call the database from other code, code which is coming some time in the future.
+## PKGBUILD
+
+This utility uses `PKGBUILD`, a shell script containing build information designed to be used with the `makepkg` utility of Arch Linux. With some additional scripting, you can probably get the `PKGBUILD` instructions to work elsewhere, or just download the source manually and follow the instructions in the `build` function.

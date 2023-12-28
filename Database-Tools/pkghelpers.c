@@ -14,12 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+#include "pkghelpers.h"
+#include "globals.h"
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <ctype.h>
-#include "pkghelpers.h"
-#include "globals.h"
 
 char* pkgAllocStringFromFile() {
     FILE* fp = fopen("PKGBUILD", "rb");
@@ -31,7 +31,7 @@ char* pkgAllocStringFromFile() {
     fseek(fp, 0L, SEEK_END);
     len = ftell(fp);
     rewind(fp);
-    char* pkgbuild = (char*)errhandMalloc(len+1);
+    char* pkgbuild = (char*)errhandMalloc(len + 1);
     if (fread(pkgbuild, sizeof(char), len, fp) != len) {
         fprintf(stderr, "Read from PKGBUILD failed.\n");
         free(pkgbuild);
@@ -57,23 +57,26 @@ size_t pkgStoreStringToFile(char* pkgbuild) {
     return bytes;
 }
 
-size_t pkgCreateDefaultFile(char* engine_name, char* version_name, char* note, char* uri,
-                            char* license, char* vcs_name, char* code_lang_name,
-                            char* frag_type, char* frag_val) {
+size_t pkgCreateDefaultFile(char* engine_name, char* version_name, char* note,
+                            char* uri, char* license, char* vcs_name,
+                            char* code_lang_name, char* frag_type,
+                            char* frag_val) {
+    // In the common order as specified by
+    // https://wiki.archlinux.org/title/PKGBUILD
     char* pkg_fmt = "# Maintainer: Your Name <your-name@example.org>\n"
                     "pkgname=%s\n"
                     "pkgver=%s\n"
                     "pkgrel=1\n"
                     "epoch=0\n"
                     "pkgdesc=\"%s\"\n"
-                    "url=\"%s\"\n"
-                    "license=('%s')\n"
-                    "source=(\"%s\")\n"
-                    "md5sums=('SKIP')\n"
                     "arch=('x86_64')\n"
+                    "url=\"%s\"\n"
+                    "license=(%s)\n"
                     "depends=(%s)\n"
                     "makedepends=(%s)\n"
-                    "checkdepends=()\n\n"
+                    "checkdepends=()\n"
+                    "source=(\"%s\")\n"
+                    "md5sums=('SKIP')\n\n"
                     "prepare() {\n  :\n}\n\n"
                     "pkgver() {\n  echo \"$pkgver\"\n}\n\n"
                     "build() {\n  :\n}\n\n"
@@ -89,13 +92,13 @@ size_t pkgCreateDefaultFile(char* engine_name, char* version_name, char* note, c
         if (isalnum(engine_name[i])) {
             engine_name[i] = tolower(engine_name[i]);
         } else if (engine_name[i] != '@' && engine_name[i] != '.' &&
-                    engine_name[i] != '+' && engine_name[i] != '-') {
+                   engine_name[i] != '+' && engine_name[i] != '-') {
             engine_name[i] = '_';
         }
     }
 
     char* name_buf;
-    int name_len = 0;
+    int   name_len = 0;
     // If the version is based on a branch head, then label it with the vcs.
     if (!strcmp(frag_type, "branch")) {
         name_len = snprintf(NULL, 0, name_fmt, engine_name, "-", vcs_name);
@@ -117,35 +120,21 @@ size_t pkgCreateDefaultFile(char* engine_name, char* version_name, char* note, c
         frag_buf[0] = '\0';
     }
 
-    // Unlike the database, which uses SPDX identifiers, these identifiers are
-    // the directory names of licenses found in /usr/share/licenses/common/,
-    // except in cases where the license cannot be found there, specified with
-    // 'custom', and possibly some additional information.
+    // PKGBUILD is making a transition to SPDX identifiers, see
+    // (https://rfc.archlinux.page/0016-spdx-license-identifiers/).
+    // This simplifies my life a lot actually.
     char* license_buf;
-    if (!strncmp(license, "AGPL-3.0", 8)) {
-        license_buf = errhandStrdup("AGPL3");
-    } else if (!strncmp(license, "Apache-2.0", 10)) {
-        license_buf = errhandStrdup("Apache");
-    } else if (!strncmp(license, "GPL-2.0", 7)) {
-        license_buf = errhandStrdup("GPL2");
-    } else if (!strncmp(license, "GPL-3.0", 7)) {
-        license_buf = errhandStrdup("GPL3");
-    } else if (!strncmp(license, "LGPL-2.1", 8)) {
-        license_buf = errhandStrdup("LGPL2.1");
-    } else if (!strncmp(license, "LGPL-3.0", 8)) {
-        license_buf = errhandStrdup("LGPL3");
-    } else if (!strncmp(license, "MPL-2.0", 7)) {
-        license_buf = errhandStrdup("MPL2");
-    } else if (!strncmp(license, "Unlicense", 9)) {
-        license_buf = errhandStrdup("Unlicense");
-    } else if (!strncmp(license, "Custom", 6)) {
-        license_buf = errhandStrdup("custom");
+    if (!strncmp(license, "Custom", 6)) {
+        int license_len = snprintf(NULL, 0, "'custom:%s-license'", engine_name);
+        license_buf = errhandMalloc(license_len + 1);
+        snprintf(license_buf, license_len + 1, "'custom:%s-license'",
+                 engine_name);
     } else if (!strncmp(license, "None", 4)) {
         license_buf = errhandStrdup("");
     } else {
-        int license_len = snprintf(NULL, 0, "custom:%s", license);
+        int license_len = snprintf(NULL, 0, "'%s'", license);
         license_buf = errhandMalloc(license_len + 1);
-        snprintf(license_buf, license_len + 1, "custom:%s", license);
+        snprintf(license_buf, license_len + 1, "'%s'", license);
     }
 
     char* dep_buf;
@@ -155,8 +144,7 @@ size_t pkgCreateDefaultFile(char* engine_name, char* version_name, char* note, c
     if (!strcmp(code_lang_name, "C") || !strcmp(code_lang_name, "C++")) {
         dep_buf = errhandStrdup("'glibc'");
         makedep_buf = errhandStrdup("");
-    }
-    else if (!strncmp(code_lang_name, "Rust", 4)) {
+    } else if (!strncmp(code_lang_name, "Rust", 4)) {
         dep_buf = errhandStrdup("");
         makedep_buf = errhandStrdup("'cargo'");
     } else {
@@ -167,9 +155,11 @@ size_t pkgCreateDefaultFile(char* engine_name, char* version_name, char* note, c
     char* source_buf;
     // Handles dependencies based on the version control system.
     if (!strncmp(vcs_name, "git", 3)) {
-        int source_len = snprintf(NULL, 0, source_fmt, vcs_name, ".git", frag_buf);
+        int source_len =
+            snprintf(NULL, 0, source_fmt, vcs_name, ".git", frag_buf);
         source_buf = errhandMalloc(source_len + 1);
-        snprintf(source_buf, source_len + 1, source_fmt, vcs_name, ".git", frag_buf);
+        snprintf(source_buf, source_len + 1, source_fmt, vcs_name, ".git",
+                 frag_buf);
 
         if (strlen(makedep_buf)) {
             makedep_buf = errhandRealloc(makedep_buf, 2 + strlen(makedep_buf));
@@ -180,7 +170,8 @@ size_t pkgCreateDefaultFile(char* engine_name, char* version_name, char* note, c
     } else if (!strncmp(vcs_name, "svn", 3)) {
         int source_len = snprintf(NULL, 0, source_fmt, vcs_name, "", frag_buf);
         source_buf = errhandMalloc(source_len + 1);
-        snprintf(source_buf, source_len + 1, source_fmt, vcs_name, "", frag_buf);
+        snprintf(source_buf, source_len + 1, source_fmt, vcs_name, "",
+                 frag_buf);
 
         if (strlen(makedep_buf)) {
             makedep_buf = errhandRealloc(makedep_buf, 2 + strlen(makedep_buf));
@@ -193,23 +184,21 @@ size_t pkgCreateDefaultFile(char* engine_name, char* version_name, char* note, c
     }
 
     int pkg_len = snprintf(NULL, 0, pkg_fmt, name_buf, version_name, note, uri,
-                            license_buf, source_buf, dep_buf, makedep_buf);
+                           license_buf, dep_buf, makedep_buf, source_buf);
     char* pkg_buf = errhandMalloc(pkg_len + 1);
     snprintf(pkg_buf, pkg_len + 1, pkg_fmt, name_buf, version_name, note, uri,
-                            license_buf, source_buf, dep_buf, makedep_buf);
+             license_buf, dep_buf, makedep_buf, source_buf);
 
     size_t ret = pkgStoreStringToFile(pkg_buf);
     free(name_buf);
     free(license_buf);
-    free(source_buf);
     free(dep_buf);
     free(makedep_buf);
+    free(source_buf);
     free(frag_buf);
     free(pkg_buf);
 
     return ret;
 }
 
-int pkgRunMakepkg() {
-    return system("./pkg-run-makepkg.sh");
-}
+int pkgRunMakepkg() { return system("./pkg-run-makepkg.sh"); }

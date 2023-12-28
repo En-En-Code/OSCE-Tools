@@ -15,12 +15,12 @@ limitations under the License.
 */
 
 #define _XOPEN_SOURCE 500
-#include <unistd.h>
+#include "globals.h"
+#include <ftw.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <ftw.h>
-#include "globals.h"
+#include <unistd.h>
 
 // Memory is allocated by this function to store ptr.
 // Free must be called when finished with the returned value.
@@ -69,7 +69,8 @@ char* errhandStrdup(const char* s) {
     return new_s;
 }
 
-// Frees a version struct created with previous calls to malloc on each char* element
+// Frees a version struct created with previous calls to malloc on each char*
+// element
 void freeVersion(version v) {
     freeRevision(v.rev);
     free(v.versionNum);
@@ -84,12 +85,14 @@ void freeCodeLink(code_link cl) {
     free(cl.vcs);
 }
 
-revision* allocRevision(char* id, char* frag_type, char* frag_val, int val_is_null) {
+revision* allocRevision(char* id, char* frag_type, char* frag_val,
+                        int val_is_null) {
     revision* rev = (revision*)errhandMalloc(sizeof(revision));
     rev->code_id = errhandStrdup(id);
-    rev->type = (strncmp(frag_type, "branch", 6) == 0) ? 1 :
-                (strncmp(frag_type, "commit", 6) == 0) ? 2 :
-                (strncmp(frag_type, "revnum", 6) == 0) ? 4 : 8;
+    rev->type = (strncmp(frag_type, "branch", 6) == 0)   ? 1
+                : (strncmp(frag_type, "commit", 6) == 0) ? 2
+                : (strncmp(frag_type, "revnum", 6) == 0) ? 4
+                                                         : 8;
     if (val_is_null) {
         rev->val = NULL;
     } else {
@@ -109,7 +112,7 @@ void freeRevision(revision r) {
 time_t readDate(const char* date_str) {
     const char* date_str_ptr = date_str;
 
-    struct tm stored_date = { 0 };
+    struct tm stored_date = {0};
     stored_date.tm_year = atoi(date_str_ptr) - 1900;
     date_str_ptr += strcspn(date_str_ptr, "-") + 1;
     stored_date.tm_mon = atoi(date_str_ptr) - 1;
@@ -121,7 +124,8 @@ time_t readDate(const char* date_str) {
 
 // A pair of helper functions based on https://stackoverflow.com/a/5467788
 // Deletes a directory and its contents recursively.
-int rm_file(const char* fpath, const struct stat* sb, int typeflag, struct FTW* ftwbuf) {
+int rm_file(const char* fpath, const struct stat* sb, int typeflag,
+            struct FTW* ftwbuf) {
     int rv = remove(fpath);
 
     if (rv)

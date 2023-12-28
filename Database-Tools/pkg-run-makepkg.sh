@@ -18,6 +18,10 @@ if [ type makepkg &>/dev/null ]; then
 	exit 1
 fi
 
+# Create a temporary directory with a copy of PKGBUILD as a workspace.
+mkdir -p build && cd build
+cp ../PKGBUILD PKGBUILD
+
 # Download and extract files and call prepare()
 makepkg --nobuild
 if [ $? != 0 ]; then
@@ -25,7 +29,7 @@ if [ $? != 0 ]; then
 	exit 1
 fi
 
-# Using Perl regex, match everything after
+# Using Perl regex, match everything after the '=' to obtain naming data.
 _pkgname=$(grep -oP "^pkgname=\K[a-z0-9@._+-]+$" PKGBUILD)
 if [ $? != 0 ]; then
 	echo "grep pkgname failed to match"
@@ -46,7 +50,7 @@ sourcetar="$_pkgname-$_pkgver-$_pkgrel.src.tar.gz"
 # Archive then compress the source files
 # find "src/$_pkgname" -path "src/$_pkgname/.git" -prune -o -print |
 cd src
-tar cfz "$sourcetar" --exclude-vcs --exclude-vcs-ignores "$_pkgname" # -T -
+tar cfz "$sourcetar" --exclude-vcs --exclude-vcs-ignores "$_pkgname"
 if [ $? != 0 ]; then
 	echo "tar failed to archive files without modification"
 	exit 3
@@ -63,8 +67,11 @@ fi
 
 # Clean up, moving the package, the source tarball, and
 # the pkgbuild tarball to a dedicated directory
-mkdir -p "Engines/$_pkgname"
-cp "pkg/$_pkgname/usr/bin/$_pkgname" "Engines/$_pkgname/$_pkgname-$_pkgver"
-mv "$_pkgname-$_pkgver-$_pkgrel-x86_64.pkg.tar.zst" "Engines/$_pkgname/"
-mv "$_pkgname-$_pkgver-$_pkgrel.src.tar.gz" "Engines/$_pkgname/"
-rm -rf "pkg" "src" "$_pkgname"
+cp PKGBUILD ../PKGBUILD
+cd ..
+mkdir -p "Engines/$_pkgname" "Engines/share/$_pkgname"
+mv "build/pkg/$_pkgname/usr/bin/$_pkgname" "Engines/$_pkgname/$_pkgname-$_pkgver"
+mv "build/pkg/$_pkgname/usr/share/$_pkgname"/* "Engines/share/$_pkgname"
+mv "build/$_pkgname-$_pkgver-$_pkgrel-x86_64.pkg.tar.zst" "Engines/$_pkgname/"
+mv "build/$sourcetar" "Engines/$_pkgname/"
+rm -rf build

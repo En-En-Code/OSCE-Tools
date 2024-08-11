@@ -84,12 +84,16 @@ const sourceforgeRepoRegex =
   I'm choosing a necessarily incomplete list of sites so that I still
   filter out many URIs which are unlikely to lead to code repositories.
 */
+const sourcehutRepoRegex = 
+  /(?:git.sr.ht\/~[A-Za-z\d_.-]+\/[A-Za-z\d_.-]+)/;
+
 const otherGitRepoRegex =
   /(?:(?:bitbucket.(?:org|io)|codeberg.org)\/[A-Za-z\d_.-]+\/[A-Za-z\d_.-]+)/;
 
 const allRepoRegex =
   new RegExp(githubRepoRegex.source + `|` + gitlabRepoRegex.source + `|` +
-    sourceforgeRepoRegex.source + `|` + otherGitRepoRegex.source, 'gi');
+    sourceforgeRepoRegex.source + `|` + sourcehutRepoRegex.source + `|` +
+    otherGitRepoRegex.source, 'gi');
 
 let linkCollection = [];
 const extractRepoLinks = account => {
